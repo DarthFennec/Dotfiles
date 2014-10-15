@@ -27,7 +27,7 @@ instance ExtensionClass SysMond where
 main = spawnPipe dzen >>= xmonad.chwm.ewmh.cfg
   where dzen = "dzen2 -ta l -w 1820 -h 25 -e 'button7=exit:13'"
 
-term = "xfce4-terminal"
+term = "roxterm"
 termexec n = term ++ " -e " ++ n
 
 cfg h = defaultConfig
@@ -48,7 +48,7 @@ chwm c = c { startupHook = mappend (startupHook c) (setWMName "LG3D") }
 scratchpads =
   [ NS "weechat" (termexec "weechat") m idHook
   , NS "pulseaudio" "pavucontrol" (className =? "Pavucontrol") idHook ]
-  where m = className =? "Xfce4-terminal" <&&> fmap (isInfixOf "WeeChat") title
+  where m = className =? "Roxterm" <&&> fmap (isInfixOf "WeeChat") title
 
 myManageHook = composeAll
   [ fullscreenManageHook
@@ -133,10 +133,6 @@ mon = [ (drawSpacer, 0), (drawStatusBars, charSize*56)
 
 runScrot = spawn "sleep 0.2; scrot -s -q 100 -e 'mv $f /home/tucker/Downloads'"
 
-vlcdbus x = "dbus-send --print-reply --session " ++ d ++ k ++ x
-  where d = "--dest=org.mpris.MediaPlayer2.vlc "
-        k = "/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player."
-
 recompileXmonad = recompile True >>= (\n -> spawn (if n then s else f))
   where s = t ++ "'Xmonad has compiled successfully.'"
         f = t ++ "'Error: Xmonad failed to compile.'"
@@ -155,10 +151,11 @@ myKeys c@(XConfig {modMask = m}) = let s = m.|.shiftMask in M.fromList $
   , ((m, xK_x        ), kill)
   , ((m, xK_t        ), withFocused $ windows. W.sink)
   , ((m, xK_r        ), spawn "rm ~/.cache/dmenu_run")
-  , ((m, xK_b        ), spawn $ vlcdbus "Previous")
-  , ((m, xK_n        ), spawn $ vlcdbus "Next")
-  , ((m, xK_p        ), spawn $ vlcdbus "PlayPause")
-  , ((m, xK_s        ), spawn $ vlcdbus "Stop")
+  , ((m, xK_m        ), spawn $ termexec "ncmpcpp")
+  , ((m, xK_b        ), spawn "mpc prev")
+  , ((m, xK_n        ), spawn "mpc next")
+  , ((m, xK_p        ), spawn "mpc toggle")
+  , ((m, xK_s        ), spawn "mpc stop")
   , ((m, xK_space    ), sendMessage NextLayout)
   , ((m, xK_Down     ), windows W.focusDown)
   , ((m, xK_Up       ), windows W.focusUp)

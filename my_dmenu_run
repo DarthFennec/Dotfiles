@@ -1,0 +1,8 @@
+#!/bin/sh
+if [ ! -e $HOME/.cache/dmenu_run ]; then
+  DIRS=`echo $PATH | tr ":" "\n"`
+  EXES=`for i in $DIRS; do stest -flx $i; done`
+  sort -u -o /tmp/dmenu_fav $HOME/.dmenu_fav
+  echo $EXES | tr " " "\n" | sort -u | comm -13 /tmp/dmenu_fav - | cat $HOME/.dmenu_fav - > $HOME/.cache/dmenu_run
+fi
+dmenu -i -h 25 -fn "Source Code Pro:size=11" -nb "#000000" -nf "#FFFFFF" -sb "#003D7B" -sf "#FFFFFF" "$@" < $HOME/.cache/dmenu_run | ${SHELL:-"/bin/sh"} &

@@ -85,6 +85,10 @@ inoremap jk <esc>
 noremap ; :
 noremap : ;
 noremap Y y$
+noremap <c-h> <c-w>h
+noremap <c-j> <c-w>j
+noremap <c-k> <c-w>k
+noremap <c-l> <c-w>l
 
 " Disable Arrow Keys
 noremap  <up>    <nop>

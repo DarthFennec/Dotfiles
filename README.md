@@ -7,3 +7,4 @@ These are most of my personal dotfiles, including:
 - My zsh config
 - My xmonad config
 - My session scripts
+- My dmenu launcher
