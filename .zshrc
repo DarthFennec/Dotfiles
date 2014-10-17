@@ -17,6 +17,7 @@ PROMPT="[%1~]: "
 alias cls="echo -ne '\ec'"
 alias ls="ls -A --color=auto"
 export CHROMIUM_USER_FLAGS="--enable-print-preview"
+export JAVA_HOME=$(readlink -f /usr/bin/javac | sed "s:bin/javac::")
 export _JAVA_AWT_WM_NONREPARENTING=1
 export EDITOR=/usr/bin/vim
 export LOGOUT_COMMAND=/home/tucker/bin/xlogout
