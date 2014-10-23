@@ -77,7 +77,8 @@ dStatColors =
   [ [ "#008000", "#198019", "#338033", "#4D804D" ]
   , [ "#000080", "#191980", "#333380", "#4D4D80" ]
   , [ "#800000", "#801919", "#803333", "#804D4D" ]
-  , [ "#800080", "#801980", "#803380", "#804D80" ] ]
+  , [ "#800080", "#801980", "#803380", "#804D80" ]
+  , [ "#008080", "#198080", "#338080", "#4D8080" ] ]
 
 dStatus (cw, args) = (intercalate (pos ";" n) $ map draw args) ++ finish
   where finish = pos ";-" (y - n) ++ border ++ " "
@@ -124,9 +125,8 @@ drawSpacer = return $ Just str
 
 drawStatusBars = XS.get >>= return. Just .concatMap dStatus.etc
   where etc = zip dStatColors.listn.(\(SysMond n) -> n)
-        listn [w,x,y,z,t,v,m,s,u,d] = [[w,x,y,z],[m,s],[t,v],[k u,k d]]
-        listn _ = [[0],[0],[0],[0]]
-        k = round.(*5).log.fromIntegral.(+1)
+        listn [] = []
+        listn (x:xs) = take x xs : listn (drop x xs)
 
 mon = [ (drawSpacer, 0), (drawStatusBars, charSize*56)
       , (dzenColorL "lightblue" "" $ date "%a %b %d %Y %I:%M:%S", charSize*25) ]
