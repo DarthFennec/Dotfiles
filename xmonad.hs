@@ -83,13 +83,16 @@ dStatColors =
 dStatus (cw, args) = (intercalate (pos ";" n) $ map draw args) ++ finish
   where finish = pos ";-" (y - n) ++ border ++ " "
         border = dzenColor "#2C2B2A" "" $ write ++ box "^ro" (charSize*13) y
-        draw x = dzenColor (color x) "" $ box "^r" x n ++ pos "-" x
+        draw x = dzenColor (color x) "" $ box "^r" (rs x) n ++ pos "-" (rs x)
         write = text ++ pos "-" (charSize * length text)
-        text = concatMap ((" " ++).showPad) args
+        text = concatMap ((" " ++).strip.showPad) args
         color x = cw !! (min 3 $ x `div` 25)
+        strip x@[_,_] = x
+        strip (_:x) = strip x
         showPad x = (if x < 10 then "0" else []) ++ show x
         box r x z = r ++ "(" ++ show x ++ "x" ++ show z ++ ")"
         pos h x = "^p(" ++ h ++ show x ++ ")"
+        rs x = x*charSize*13 `div` 100
         n = y `div` length args
         y = 20
 
@@ -126,6 +129,7 @@ drawSpacer = return $ Just str
 drawStatusBars = XS.get >>= return. Just .concatMap dStatus.etc
   where etc = zip dStatColors.listn.(\(SysMond n) -> n)
         listn [] = []
+        listn (0:_) = []
         listn (x:xs) = take x xs : listn (drop x xs)
 
 mon = [ (drawSpacer, 0), (drawStatusBars, charSize*56)
