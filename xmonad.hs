@@ -122,23 +122,22 @@ pp h = PP
   , ppOrder           = \(x:y:z) -> ("^ib(1)^p(_LEFT)" ++ offs):y:x:z
   , ppOutput          = hPutStrLn h
   , ppSort            = getSortByIndex >>= return.(f.)
-  , ppExtras          = map fst mon }
+  , ppExtras          = [drawStatus, drawDate] }
   where f x = let x' = init x in last x':init x'
         l x = if x == "Tall" then "| " else "+ "
         offs = "^pa(;" ++ show topOffset ++ ")"
 
-drawSpacer = return $ Just str
-  where str = "^p(_RIGHT)^p(-" ++ n mon ++ ")^p(;0)"
-        n = show.sum.map snd
-
-drawStatusBars = XS.get >>= return. Just .concatMap dStatus.etc
-  where etc = zip dStatColors.listn.(\(SysMond n) -> n)
+drawStatus = do
+  barData <- XS.get
+  let bars = map dStatus.zip dStatColors.listn.(\(SysMond n) -> n) $ barData
+  let size = show $ charSize*(25 + 14*length bars)
+  return. Just .concat $ spacer size ++ bars
+  where spacer size = ["^p(_RIGHT)^p(-", size, ")^p(;0)"]
         listn [] = []
         listn (0:_) = []
         listn (x:xs) = take x xs : listn (drop x xs)
 
-mon = [ (drawSpacer, 0), (drawStatusBars, charSize*56)
-      , (dzenColorL "lightblue" "" $ date "%a %b %d %Y %I:%M:%S", charSize*25) ]
+drawDate = dzenColorL "lightblue" "" $ date "%a %b %d %Y %I:%M:%S"
 
 runScrot = spawn "sleep 0.2; scrot -s -q 100 -e 'mv $f /home/tucker/Downloads'"
 
