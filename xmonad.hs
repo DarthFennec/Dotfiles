@@ -72,6 +72,7 @@ logoutHook (ClientMessageEvent _ _ _ _ _ typ _) = do
 logoutHook _ = return $ All True
 
 charSize = 9
+topOffset = 3
 
 dStatColors =
   [ [ "#008000", "#198019", "#338033", "#4D804D" ]
@@ -80,8 +81,8 @@ dStatColors =
   , [ "#800080", "#801980", "#803380", "#804D80" ]
   , [ "#008080", "#198080", "#338080", "#4D8080" ] ]
 
-dStatus (cw, args) = (intercalate (pos ";" n) $ map draw args) ++ finish
-  where finish = pos ";-" (y - n) ++ border ++ " "
+dStatus (cw, args) = position $ intercalate (pos ";" n) $ map draw args
+  where position x = offs ++ x ++ pos ";-" (y - n) ++ offs ++ border ++ " "
         border = dzenColor "#2C2B2A" "" $ write ++ box "^ro" (charSize*13) y
         draw x = dzenColor (color x) "" $ box "^r" (rs x) n ++ pos "-" (rs x)
         write = text ++ pos "-" (charSize * length text)
@@ -93,16 +94,19 @@ dStatus (cw, args) = (intercalate (pos ";" n) $ map draw args) ++ finish
         box r x z = r ++ "(" ++ show x ++ "x" ++ show z ++ ")"
         pos h x = "^p(" ++ h ++ show x ++ ")"
         rs x = x*charSize*13 `div` 100
+        offs = "^pa(;" ++ show topOffset ++ ")"
         n = y `div` length args
-        y = 20
+        y = 19
 
-dBackSh shape color = (++).concat $ ["^p(",a,")",s y,"^p(",b,")"]
+dBackSh shape color = (++) $ p a o ++ s y ++ p b (-o)
   where (x, v) = (charSize `div` 2, -y `div` 2)
         (a, b) = (show $ x + v, show $ v - x)
         s = dzenColor color "".concat.d shape
         d "s" n = ["^r(",show n,"x",show n,")"]
         d "c" n = ["^c(",show n,")"]
+        p n m = "^p(" ++ n ++ ";" ++ show m ++ ")"
         y = 16
+        o = 2
 
 pp h = PP
   { ppCurrent         = dBackSh "s" "#003D7B".dzenColor "yellow" ""
@@ -115,12 +119,13 @@ pp h = PP
   , ppTitle           = dzenColor "green" "".pad.pad.dzenEscape.shorten 90
   , ppTitleSanitize   = id
   , ppLayout          = pad.dBackSh "c" "#003D7B".dzenColor "yellow" "".l
-  , ppOrder           = \(x:y:z) -> "^ib(1)^p(_LEFT)":y:x:z
+  , ppOrder           = \(x:y:z) -> ("^ib(1)^p(_LEFT)" ++ offs):y:x:z
   , ppOutput          = hPutStrLn h
   , ppSort            = getSortByIndex >>= return.(f.)
   , ppExtras          = map fst mon }
   where f x = let x' = init x in last x':init x'
         l x = if x == "Tall" then "| " else "+ "
+        offs = "^pa(;" ++ show topOffset ++ ")"
 
 drawSpacer = return $ Just str
   where str = "^p(_RIGHT)^p(-" ++ n mon ++ ")^p(;0)"
