@@ -5,10 +5,13 @@ set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
 Plugin 'gmarik/Vundle.vim'
 Plugin 'kien/ctrlp.vim'
-Plugin 'rking/ag.vim'
 Plugin 'sjl/gundo.vim'
+Plugin 'dyng/ctrlsf.vim'
 Plugin 'nathanaelkane/vim-indent-guides'
+Plugin 'tpope/vim-repeat'
 Plugin 'tpope/vim-sleuth'
+Plugin 'tpope/vim-fugitive'
+Plugin 'tpope/vim-surround'
 Plugin 'tomasr/molokai'
 call vundle#end()
 filetype plugin indent on
@@ -36,11 +39,12 @@ set cursorline
 set wildmenu
 set showmatch
 set laststatus=2
+set fillchars+=vert:\ 
 set statusline=%<%t\ %y%h%m%r%=%-14.(%l,%c%V%)\ %P
 
 " Show Whitespace
 set list
-set listchars=tab:»-,trail:·
+set listchars=tab:▶┈,trail:·
 
 " Indent Options
 set tabstop=2
@@ -54,17 +58,12 @@ set hlsearch
 set ignorecase
 set smartcase
 
-" Backup Options
-set backup
-set backupdir=~/.vim-tmp,~/.tmp,~/tmp,/var/tmp,/tmp
-set backupskip=/tmp/*,/private/tmp/*
-set directory=~/.vim-tmp,~/.tmp,~/tmp,/var/tmp,/tmp
-set writebackup
-
 " Miscellaneous Options
 set hidden
 set ttyfast
 set matchpairs+=<:>
+set pastetoggle=<F2>
+set directory=~/.vim/.swap//
 command! W w ! sudo tee % > /dev/null
 
 " CtrlP Options
@@ -74,6 +73,8 @@ nnoremap <silent> <c-o> :CtrlP<cr>
 
 " Leader Bindings
 let mapleader=","
+nnoremap <leader>s :CtrlSF 
+nnoremap <silent> <leader>a :CtrlSFOpen<cr>
 nnoremap <silent> <leader>u :GundoToggle<cr>
 nnoremap <silent> <leader>e :split $MYVIMRC<cr>
 nnoremap <silent> <leader>r :source $MYVIMRC<cr>
@@ -81,6 +82,7 @@ nnoremap <silent> <leader>r :source $MYVIMRC<cr>
 " Custom Rebindings
 nnoremap <tab> :nohlsearch<cr>:<bs>
 nnoremap n nzz
+nnoremap N Nzz
 inoremap jk <esc>
 noremap ; :
 noremap : ;

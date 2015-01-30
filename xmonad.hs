@@ -96,7 +96,7 @@ dStatus (cw, args) = position $ intercalate (pos ";" n) $ map draw args
         rs x = x*charSize*13 `div` 100
         offs = "^pa(;" ++ show topOffset ++ ")"
         n = y `div` length args
-        y = 19
+        y = 20
 
 dBackSh shape color = (++) $ p a o ++ s y ++ p b (-o)
   where (x, v) = (charSize `div` 2, -y `div` 2)
