@@ -1,5 +1,6 @@
 #!/bin/bash
-export PATH=.:/home/tucker/bin:/home/tucker/.cabal/bin:$PATH
+export PATH=/home/tucker/bin:/home/tucker/.cabal/bin:$PATH
+[ -s ~/.Xmodmap ] && xmodmap ~/.Xmodmap
 xrandr --output DVI-I-1 --mode 1920x1080
 xrandr --output HDMI-1 --mode 1920x1080 --below DVI-I-1
 xset s off
@@ -12,6 +13,6 @@ pavucontrol &
 conky | xmoconk &
 trayer --edge top --align right --margin 0 --padding 0 --width 100 \
 --height 25 --widthtype pixel --transparent true --alpha 0 --tint 0x000000 &
-[[ ! -e /usr/bin/weechat ]] || roxterm -e weechat &
+[ -e /usr/bin/weechat ] && roxterm -e weechat &
 dropboxd &
 exec xmonad

@@ -12,6 +12,11 @@ zstyle :compinstall filename '/home/tucker/.zshrc'
 autoload -Uz compinit
 compinit
 # End of lines added by compinstall
+
+# Bind my vim escape sequence
+bindkey -M viins 'jk' vi-cmd-mode
+
+# Custom prompt
 autoload -U promptinit && promptinit
 PROMPT="[%1~]: "
 
@@ -41,4 +46,3 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 export EDITOR=/usr/bin/vim
 export LOGOUT_COMMAND=/home/tucker/bin/xlogout
 export TERM=xterm-256color
-export KEYTIMEOUT=1

@@ -7,22 +7,25 @@ Plugin 'gmarik/Vundle.vim'
 Plugin 'kien/ctrlp.vim'
 Plugin 'sjl/gundo.vim'
 Plugin 'dyng/ctrlsf.vim'
-Plugin 'nathanaelkane/vim-indent-guides'
+Plugin 'ciaranm/detectindent'
+Plugin 'Townk/vim-autoclose'
+Plugin 'vim-scripts/closetag.vim'
 Plugin 'tpope/vim-repeat'
-Plugin 'tpope/vim-sleuth'
 Plugin 'tpope/vim-fugitive'
 Plugin 'tpope/vim-surround'
+Plugin 'nathanaelkane/vim-indent-guides'
 Plugin 'tomasr/molokai'
 call vundle#end()
 filetype plugin indent on
 
 " Syntax Hilighting
 syntax enable
-colorscheme molokai
 set background=dark
+colorscheme molokai
 let g:indent_guides_auto_colors=0
 augroup indentgroup
 autocmd!
+autocmd BufRead * :DetectIndent
 autocmd VimEnter * :IndentGuidesEnable
 autocmd VimEnter,Colorscheme * :hi IndentGuidesOdd  ctermbg=234 ctermfg=59
 autocmd VimEnter,Colorscheme * :hi IndentGuidesEven ctermbg=235 ctermfg=59
@@ -42,9 +45,12 @@ set laststatus=2
 set fillchars+=vert:\ 
 set statusline=%<%t\ %y%h%m%r%=%-14.(%l,%c%V%)\ %P
 
+" Airline Options
+
+
 " Show Whitespace
 set list
-set listchars=tab:▶┈,trail:·
+set listchars=tab:▶\ ,trail:·
 
 " Indent Options
 set tabstop=2
@@ -76,6 +82,7 @@ let mapleader=","
 nnoremap <leader>s :CtrlSF 
 nnoremap <silent> <leader>a :CtrlSFOpen<cr>
 nnoremap <silent> <leader>u :GundoToggle<cr>
+nnoremap <silent> <leader>i :DetectIndent<cr>
 nnoremap <silent> <leader>e :split $MYVIMRC<cr>
 nnoremap <silent> <leader>r :source $MYVIMRC<cr>
 
