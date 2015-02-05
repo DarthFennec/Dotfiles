@@ -45,9 +45,6 @@ set laststatus=2
 set fillchars+=vert:\ 
 set statusline=%<%t\ %y%h%m%r%=%-14.(%l,%c%V%)\ %P
 
-" Airline Options
-
-
 " Show Whitespace
 set list
 set listchars=tab:▶\ ,trail:·
