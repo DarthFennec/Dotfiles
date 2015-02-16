@@ -182,7 +182,7 @@ myMouse (XConfig {modMask = m}) = M.fromList
   , ((m, button3), s mouseResizeWindow)
   , ((m, button4), v "+1%")
   , ((m, button5), v "-1%") ]
-  where v = const.spawn.(concat ["pactl set-sink-volume ", n, " -- "] ++)
+  where v = const.spawn.(concat ["pactl set-sink-volume ", n, " "] ++)
         n = "alsa_output.pci-0000_00_14.2.analog-stereo"
         s f w = let x = runQuery isFullscreen w
                     y = focus w >> f w >> windows W.shiftMaster
