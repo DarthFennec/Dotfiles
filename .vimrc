@@ -11,7 +11,6 @@ Plugin 'ciaranm/detectindent'
 Plugin 'Townk/vim-autoclose'
 Plugin 'vim-scripts/closetag.vim'
 Plugin 'tpope/vim-repeat'
-Plugin 'tpope/vim-fugitive'
 Plugin 'tpope/vim-surround'
 Plugin 'nathanaelkane/vim-indent-guides'
 Plugin 'tomasr/molokai'
@@ -64,8 +63,8 @@ set smartcase
 " Miscellaneous Options
 set hidden
 set ttyfast
+set nojoinspaces
 set matchpairs+=<:>
-set pastetoggle=<F2>
 set directory=~/.vim/.swap//
 command! W w ! sudo tee % > /dev/null
 
@@ -81,6 +80,7 @@ nnoremap <leader>s :CtrlSF
 nnoremap <silent> <leader>a :CtrlSFOpen<cr>
 nnoremap <silent> <leader>u :GundoToggle<cr>
 nnoremap <silent> <leader>i :DetectIndent<cr>
+nnoremap <silent> <leader>w /[^\x00-\x7f]<cr>
 nnoremap <silent> <leader>e :split $MYVIMRC<cr>
 nnoremap <silent> <leader>r :source $MYVIMRC<cr>
 
