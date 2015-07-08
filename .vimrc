@@ -28,6 +28,7 @@ autocmd BufRead * :DetectIndent
 autocmd VimEnter * :IndentGuidesEnable
 autocmd VimEnter,Colorscheme * :hi IndentGuidesOdd  ctermbg=234 ctermfg=59
 autocmd VimEnter,Colorscheme * :hi IndentGuidesEven ctermbg=235 ctermfg=59
+autocmd BufNewFile,BufRead *.gradle set filetype=groovy
 augroup END
 
 " Line Size Marker
@@ -71,7 +72,7 @@ command! W w ! sudo tee % > /dev/null
 " CtrlP Options
 let g:ctrlp_cmd = 'CtrlPBuffer'
 let g:ctrlp_user_command =
-  \ ['.git', 'cd %s && git ls-files', 'ag %s -al --nocolor -g ""']
+  \ ['.git', 'git ls-files -o --full-name', 'ag %s -l --nocolor -g ""']
 nnoremap <silent> <c-o> :CtrlP<cr>
 
 " Leader Bindings
