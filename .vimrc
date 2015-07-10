@@ -29,6 +29,7 @@ autocmd VimEnter * :IndentGuidesEnable
 autocmd VimEnter,Colorscheme * :hi IndentGuidesOdd  ctermbg=234 ctermfg=59
 autocmd VimEnter,Colorscheme * :hi IndentGuidesEven ctermbg=235 ctermfg=59
 autocmd BufNewFile,BufRead *.gradle set filetype=groovy
+autocmd bufreadpre COMMIT_EDITMSG setlocal textwidth=72
 augroup END
 
 " Line Size Marker
