@@ -73,7 +73,8 @@ command! W w ! sudo tee % > /dev/null
 " CtrlP Options
 let g:ctrlp_cmd = 'CtrlPBuffer'
 let g:ctrlp_user_command =
-  \ ['.git', 'git ls-files -o --full-name', 'ag %s -l --nocolor -g ""']
+  \ ['.git', 'cd %s && git ls-files -co --exclude-standard --full-name',
+  \ 'ag %s -l --nocolor -g ""']
 nnoremap <silent> <c-o> :CtrlP<cr>
 
 " Leader Bindings
