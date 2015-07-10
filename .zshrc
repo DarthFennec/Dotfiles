@@ -15,6 +15,7 @@ compinit
 
 # Bind my vim escape sequence
 bindkey -M viins 'jk' vi-cmd-mode
+bindkey "^?" backward-delete-char
 
 # Custom prompt
 autoload -U promptinit && promptinit
