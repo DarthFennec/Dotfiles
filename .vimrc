@@ -12,6 +12,7 @@ Plugin 'Townk/vim-autoclose'
 Plugin 'vim-scripts/closetag.vim'
 Plugin 'tpope/vim-repeat'
 Plugin 'tpope/vim-surround'
+Plugin 'tpope/vim-commentary'
 Plugin 'nathanaelkane/vim-indent-guides'
 Plugin 'tomasr/molokai'
 call vundle#end()
