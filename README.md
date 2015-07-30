@@ -8,3 +8,4 @@ These are most of my personal dotfiles, including:
 - My xmonad config
 - My session scripts
 - My dmenu launcher
+- My emacs config (wip, trial)
