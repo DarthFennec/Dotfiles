@@ -25,7 +25,7 @@ instance ExtensionClass SysMond where
   initialValue = SysMond []
 
 main = spawnPipe dzen >>= xmonad.chwm.ewmh.cfg
-  where dzen = "dzen2 -ta l -w 1820 -h 25 -e 'button7=exit:13'"
+  where dzen = "dzen2 -ta l -w 1820 -h 25 -e ''"
 
 term = "roxterm"
 termexec n = term ++ " -e " ++ n
