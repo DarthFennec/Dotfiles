@@ -67,6 +67,7 @@ set smartcase
 set hidden
 set ttyfast
 set nojoinspaces
+set showtabline=0
 set matchpairs+=<:>
 set directory=~/.vim/.swap//
 command! W w ! sudo tee % > /dev/null
@@ -92,6 +93,9 @@ nnoremap <silent> <leader>r :source $MYVIMRC<cr>
 nnoremap <tab> :nohlsearch<cr>:<bs>
 nnoremap n nzz
 nnoremap N Nzz
+nnoremap H H0
+nnoremap M M0
+nnoremap L L0
 inoremap jk <esc>
 noremap ; :
 noremap : ;

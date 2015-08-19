@@ -22,13 +22,6 @@
 
 ;;; Theme
 (load-theme 'monokai t)
-(custom-set-faces
- '(default ((t (:family "Source Code Pro"
-		:foundry "adobe"
-		:slant normal
-		:weight semi-bold
-		:height 113
-		:width normal)))))
 
 ;;; Evil Mode
 (require 'evil-leader)
@@ -56,6 +49,12 @@
 (setq scroll-conservatively 10000)
 (setq require-final-newline t)
 (custom-set-variables '(show-paren-mode t))
+(setq vc-follow-symlinks t)
+
+;;; Show Whitespace
+(require 'whitespace)
+(setq whitespace-style '(face lines-tail indentation trailing tab-mark))
+(global-whitespace-mode)
 
 ;;; Escape Sequence
 (require 'key-chord)
