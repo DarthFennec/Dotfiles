@@ -1,5 +1,15 @@
+! cursor
 Xcursor.theme: oxy-obsidian-hc
 Xcursor.size: 16
+
+! emacs
+emacs.font: Source Code Pro:size=15
+emacs.cursorBlink: off
+emacs.menuBar: off
+emacs.toolBar: off
+emacs.verticalScrollBars: off
+
+! dzen
 dzen2.font: Source Code Pro:size=11
 dzen2.background: black
 dzen2.foreground: white
