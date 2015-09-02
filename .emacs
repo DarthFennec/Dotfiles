@@ -11,8 +11,22 @@
         helm helm-ag helm-projectile
         dtrt-indent autopair multi-term hydra
         python-mode groovy-mode haskell-mode
-        highlight-quoted highlight-numbers paren-face facemenu+
+        highlight-quoted highlight-numbers paren-face facemenu+ package-utils
         monokai-theme))
+
+;;; Package Maintenance
+(defun update-packages () (interactive)
+  ;; refresh package list
+  (package-refresh-contents)
+  ;; clean
+  ;; upgrade
+  (package-utils-upgrade-all-no-fetch)
+  ;; install
+  (dolist (package package-list)
+    (unless (package-installed-p package)
+      (package-install package)))
+  ;; clear the minibuffer
+  (message nil))
 
 ;;; Initialize
 (require 'package)
@@ -30,15 +44,6 @@
 (require 'whitespace)
 (require 'key-chord)
 (require 'multi-term)
-
-;;; Package Maintenance
-;; todo: add cleanup and update
-(defun update-packages () (interactive)
-  (package-refresh-contents)
-  (dolist (package package-list)
-    (unless (package-installed-p package)
-      (package-install package)))
-  (message nil))
 
 ;;;; Behavior
 
