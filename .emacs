@@ -10,7 +10,7 @@
       '(evil evil-tabs evil-leader evil-numbers evil-surround evil-quickscope
         helm helm-ag helm-projectile
         dtrt-indent autopair multi-term hydra
-        python-mode groovy-mode haskell-mode
+        python-mode groovy-mode haskell-mode markdown-mode
         highlight-quoted highlight-numbers paren-face facemenu+ package-utils
         monokai-theme))
 
@@ -19,12 +19,12 @@
   ;; refresh package list
   (package-refresh-contents)
   ;; clean
-  ;; upgrade
-  (package-utils-upgrade-all-no-fetch)
   ;; install
   (dolist (package package-list)
     (unless (package-installed-p package)
       (package-install package)))
+  ;; upgrade
+  (package-utils-upgrade-all-no-fetch)
   ;; clear the minibuffer
   (message nil))
 
@@ -91,12 +91,19 @@
 (global-paren-face-mode)
 (global-evil-surround-mode 1)
 (add-hook 'prog-mode-hook 'linum-mode)
+(add-hook 'text-mode-hook 'linum-mode)
 (add-hook 'prog-mode-hook 'hl-line-mode)
+(add-hook 'text-mode-hook 'hl-line-mode)
 (add-hook 'prog-mode-hook 'autopair-mode)
+(add-hook 'text-mode-hook 'autopair-mode)
 (add-hook 'prog-mode-hook 'whitespace-mode)
+(add-hook 'text-mode-hook 'whitespace-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
+(add-hook 'text-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
+(add-hook 'text-mode-hook 'highlight-numbers-mode)
 (add-hook 'prog-mode-hook 'turn-on-evil-quickscope-always-mode)
+(add-hook 'text-mode-hook 'turn-on-evil-quickscope-always-mode)
 
 ;;; Load Theme
 (load-theme 'monokai t)
