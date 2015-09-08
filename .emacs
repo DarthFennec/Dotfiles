@@ -7,11 +7,12 @@
 
 ;;; Package List
 (setq package-list
-      '(evil evil-tabs evil-leader evil-numbers evil-surround evil-quickscope
+      '(evil evil-tabs evil-leader evil-numbers
+        evil-surround evil-quickscope
         helm helm-ag helm-projectile
-        dtrt-indent autopair multi-term hydra
+        dtrt-indent autopair multi-term hydra package-utils
         python-mode groovy-mode haskell-mode markdown-mode
-        highlight-quoted highlight-numbers paren-face facemenu+ package-utils
+        highlight-quoted highlight-numbers paren-face
         monokai-theme))
 
 ;;; Package Maintenance
@@ -32,7 +33,7 @@
 (require 'package)
 (package-initialize)
 
-;;;; Requires
+;;; Requires
 (require 'helm)
 (require 'helm-config)
 (require 'evil-leader)
@@ -80,12 +81,26 @@
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
  '(backup-directory-alist `((".*" . ,backup-dir)))
  ;; Multiterm
- '(multi-term-program "/bin/zsh"))
+ '(multi-term-program "/bin/zsh")
+ ;; Helm
+ '(helm-boring-buffer-regexp-list
+   '("\\` " "\\*helm" "\\*messages\\*" "\\*help\\*" "\\*backtrace\\*"
+     "\\*faces\\*" "\\*completions\\*" "\\*customize")))
 
 ;;; Disable GUI
 (tool-bar-mode -1)
 (menu-bar-mode -1)
 (scroll-bar-mode -1)
+
+;;; Helm And Friends
+(helm-mode 1)
+(projectile-global-mode)
+(helm-projectile-on)
+
+;;; Evil And Friends
+(global-evil-leader-mode)
+(evil-mode 1)
+(global-evil-tabs-mode t)
 
 ;;; Highlighting And Misc
 (global-paren-face-mode)
@@ -99,49 +114,17 @@
 (add-hook 'prog-mode-hook 'whitespace-mode)
 (add-hook 'text-mode-hook 'whitespace-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
-(add-hook 'text-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
-(add-hook 'text-mode-hook 'highlight-numbers-mode)
 (add-hook 'prog-mode-hook 'turn-on-evil-quickscope-always-mode)
 (add-hook 'text-mode-hook 'turn-on-evil-quickscope-always-mode)
 
 ;;; Load Theme
 (load-theme 'monokai t)
 
-;;; Set Custom Faces
-(custom-set-faces
- '(isearch
-   ((t (:background "#FD5FF0"
-        :foreground "#272822"
-        :weight semi-bold))))
- '(lazy-highlight
-   ((t (:background "#E6DB74"
-        :foreground "#272822"
-        :weight semi-bold))))
- '(linum
-   ((t (:inherit (shadow default)
-        :background "#272822"
-        :foreground "#75715E"
-        :weight semi-bold)))))
+;;;; Keybindings
 
-;;; Helm And Friends
-(helm-mode 1)
-;; Enable Projectile
-(projectile-global-mode)
-(helm-projectile-on)
-;; Make Helm More Evil
-(defhydra helm-like-unite ()
-  ("<SPC>" helm-toggle-visible-mark)
-  ("a" helm-toggle-all-marks)
-  ("v" helm-execute-persistent-action)
-  ("g" helm-beginning-of-buffer)
-  ("h" helm-previous-source)
-  ("l" helm-next-source)
-  ("G" helm-end-of-buffer)
-  ("j" helm-next-line)
-  ("k" helm-previous-line)
-  ("<RET>" nil)
-  ("q" nil))
+;;; Custom Ex Commands
+(evil-ex-define-cmd "k[ill-buffer]" 'kill-this-buffer)
 
 ;;; Persistent Window Mode
 (defhydra window-mode ()
@@ -173,22 +156,6 @@
   ("," evil-window-decrease-width)
   ("q" nil))
 
-;;; Evil And Friends
-;; Evil Leader
-(global-evil-leader-mode)
-;; Evil Mode
-(evil-mode 1)
-;; Evil Tabs
-(global-evil-tabs-mode t)
-;; Evil Numbers
-(define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
-(define-key evil-normal-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
-(define-key evil-visual-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
-(define-key evil-visual-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
-
-;;; Custom Ex Commands
-(evil-ex-define-cmd "k[ill-buffer]" 'kill-this-buffer)
-
 ;;; Escape Sequence
 (key-chord-mode 1)
 (key-chord-define evil-insert-state-map "jk" 'evil-normal-state)
@@ -196,29 +163,32 @@
 (key-chord-define evil-replace-state-map "jk" 'evil-normal-state)
 (key-chord-define minibuffer-local-map "jk" 'helm-like-unite/body)
 
-;;; Keybindings
-;; Swap Colon And Semicolon
+;;; Swap Colon And Semicolon
 (define-key evil-normal-state-map ";" 'evil-ex)
 (define-key evil-normal-state-map ":" 'evil-repeat-find-char)
 (define-key evil-visual-state-map ";" 'evil-ex)
 (define-key evil-visual-state-map ":" 'evil-repeat-find-char)
 (define-key evil-motion-state-map ";" 'evil-ex)
 (define-key evil-motion-state-map ":" 'evil-repeat-find-char)
-;; Show Current File Path
+
+;;; Show Current File Path
 (defun show-file-path () (interactive) (message (buffer-file-name)))
 (define-key evil-normal-state-map (kbd "C-g") 'evil-show-file-info)
 (define-key evil-visual-state-map (kbd "C-g") 'evil-show-file-info)
 (define-key evil-motion-state-map (kbd "C-g") 'evil-show-file-info)
 (define-key evil-insert-state-map (kbd "C-g") 'evil-show-file-info)
 (define-key evil-replace-state-map (kbd "C-g") 'evil-show-file-info)
-;; Yank Rest Of Line
+
+;;; Yank Rest Of Line
 (defun yank-line-rest () (interactive) (evil-yank (point) (point-at-eol)))
 (define-key evil-normal-state-map "Y" 'yank-line-rest)
 (define-key evil-motion-state-map "Y" 'yank-line-rest)
-;; C-w In Insert Mode
+
+;;; C-w In Insert Mode
 (define-key evil-insert-state-map (kbd "C-w") 'evil-window-map)
 (define-key evil-replace-state-map (kbd "C-w") 'evil-window-map)
-;; Window Jumps Column Zero
+
+;;; Window Jumps Column Zero
 (defmacro jump-and-zero (jmp)
   `(lambda () (interactive) (,jmp) (evil-beginning-of-line)))
 (define-key evil-normal-state-map "H" (jump-and-zero evil-window-top))
@@ -231,7 +201,19 @@
 (define-key evil-motion-state-map "M" (jump-and-zero evil-window-middle))
 (define-key evil-motion-state-map "L" (jump-and-zero evil-window-bottom))
 
-;;; Indentation
+;;; Evil Numbers
+(define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
+(define-key evil-normal-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
+(define-key evil-visual-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
+(define-key evil-visual-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
+
+;;; Helm More Evil Motions
+(define-key helm-map (kbd "C-j") 'helm-next-line)
+(define-key helm-map (kbd "C-k") 'helm-previous-line)
+(define-key helm-map (kbd "C-n") 'helm-execute-persistent-action)
+(define-key helm-map (kbd "C-p") 'helm-delete-minibuffer-contents)
+
+;;; Automatic Indentation
 (define-key global-map (kbd "RET") 'newline-and-indent)
 
 ;;; Helm M-x
