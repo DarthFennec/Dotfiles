@@ -14,7 +14,10 @@ compinit
 # End of lines added by compinstall
 
 # Bind my vim escape sequence
+if [ "$TERM" != "eterm-color" ]
+then
 bindkey -M viins 'jk' vi-cmd-mode
+fi
 bindkey "^?" backward-delete-char
 
 # Custom prompt
@@ -38,12 +41,34 @@ eval $(dircolors -b)
 alias ls="ls -A --color=auto"
 alias grep="grep --color=auto"
 
+# Emacs location hinting
+if [ "$TERM" = "eterm-color" ]
+then
+precmd() {
+echo -e "\eAnSiTu" "$LOGNAME"
+echo -e "\eAnSiTc" "$(pwd)"
+echo -e "\eAnSiTh" "$(hostname -f)"
+}
+fi
+
+# Emacs edit hinting
+if [ "$TERM" = "eterm-color" ]
+then
+export ETERM=eterm
+alias e='echo -e "\eAnSiTe"'
+alias x='echo -e "\eAnSiTx"'
+else
+alias e=vim
+alias x=vim
+fi
+
 # Miscellaneous
 alias cls="echo -ne '\ec'"
 preexec() { d="$(echo "$3" | sed "s:^~:$HOME:")" ; [ -d $d ] && ls $d }
 export CHROMIUM_USER_FLAGS="--enable-print-preview"
 export JAVA_HOME="$(readlink -f /usr/bin/javac | sed "s:bin/javac::")"
 export _JAVA_AWT_WM_NONREPARENTING=1
-export EDITOR=/usr/bin/vim
 export LOGOUT_COMMAND=/home/tucker/bin/xlogout
 export TERM=xterm-256color
+export EDITOR=vim
+export VISUAL=vim

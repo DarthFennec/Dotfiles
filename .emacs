@@ -10,8 +10,8 @@
       '(evil evil-tabs evil-leader evil-numbers
         evil-surround evil-quickscope
         helm helm-ag helm-projectile
-        dtrt-indent autopair multi-term hydra package-utils
-        python-mode groovy-mode haskell-mode markdown-mode
+        dtrt-indent multi-term hydra key-chord package-utils magit
+        python-mode groovy-mode haskell-mode markdown-mode go-mode
         highlight-quoted highlight-numbers paren-face
         monokai-theme))
 
@@ -41,10 +41,11 @@
 (require 'evil-numbers)
 (require 'evil-quickscope)
 (require 'evil-surround)
-(require 'autopair)
+(require 'dtrt-indent)
 (require 'whitespace)
 (require 'key-chord)
 (require 'multi-term)
+(require 'markdown-mode)
 
 ;;;; Behavior
 
@@ -55,6 +56,12 @@
 (defvar autosave-dir (expand-file-name "~/.emacs.d/autosave/"))
 (defvar backup-dir (expand-file-name "~/.emacs.d/backup/"))
 
+;;; Language Specific Changes
+(add-hook 'haskell-mode-hook 'haskell-indentation-mode)
+(setq dtrt-indent-hook-mapping-list
+      (cons '(groovy-mode c/c++/java c-basic-offset)
+            dtrt-indent-hook-mapping-list))
+
 ;;; Set Custom Variables
 (custom-set-variables
  ;; Projectile Settings
@@ -64,7 +71,6 @@
  '(scroll-step 1)
  '(scroll-conservatively 10000)
  ;; Better Behavior
- '(autopair-blink nil)
  '(vc-follow-symlinks t)
  '(require-final-newline t)
  '(inhibit-startup-screen t)
@@ -85,7 +91,34 @@
  ;; Helm
  '(helm-boring-buffer-regexp-list
    '("\\` " "\\*helm" "\\*messages\\*" "\\*help\\*" "\\*backtrace\\*"
-     "\\*faces\\*" "\\*completions\\*" "\\*customize")))
+     "\\*faces\\*" "\\*completions\\*" "\\*customize" "\\*packages\\*"
+     "\\*compile-log\\*" "\\*man" "\\*tramp" "\\*warnings\\*"
+     "\\*magit" "\\*info\\*")))
+
+;;; Hook Editing Via Term-Mode
+(when (require 'term nil t)
+  (defadvice term-handle-ansi-terminal-messages
+    (before handle-custom-ansi-terminal-messages activate)
+    (when (string-match "\eAnSiT.+\n" message)
+      (let* ((start (match-beginning 0))
+             (end (match-end 0))
+             (command-code (aref message (+ start 6)))
+             (argument
+              (save-match-data
+                (substring message (+ start 8)
+                           (string-match "\r?\n" message (+ start 8))))))
+        (cond ((= command-code ?e)
+               (save-excursion (find-file-other-window argument)))
+              ((= command-code ?x)
+               (save-excursion (find-file argument))))))))
+
+;;; Auto Open As Root
+(defadvice find-file (after find-file-sudo activate)
+  (unless (and buffer-file-name (file-writable-p buffer-file-name))
+    (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
+(defadvice find-file-other-window (after find-file-other-window-sudo activate)
+  (unless (and buffer-file-name (file-writable-p buffer-file-name))
+    (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
 
 ;;; Disable GUI
 (tool-bar-mode -1)
@@ -109,10 +142,10 @@
 (add-hook 'text-mode-hook 'linum-mode)
 (add-hook 'prog-mode-hook 'hl-line-mode)
 (add-hook 'text-mode-hook 'hl-line-mode)
-(add-hook 'prog-mode-hook 'autopair-mode)
-(add-hook 'text-mode-hook 'autopair-mode)
 (add-hook 'prog-mode-hook 'whitespace-mode)
 (add-hook 'text-mode-hook 'whitespace-mode)
+(add-hook 'prog-mode-hook 'electric-pair-mode)
+(add-hook 'text-mode-hook 'electric-pair-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
 (add-hook 'prog-mode-hook 'turn-on-evil-quickscope-always-mode)
@@ -120,6 +153,12 @@
 
 ;;; Load Theme
 (load-theme 'monokai t)
+
+;;;; Face Customizations
+(dotimes (i 6)
+  (set-face-attribute
+   (intern (concat "markdown-header-face-" (number-to-string (+ i 1))))
+   nil :height 'unspecified))
 
 ;;;; Keybindings
 
@@ -223,6 +262,7 @@
 (evil-leader/set-leader ",")
 (evil-leader/set-key
   "t" 'multi-term
+  "g" 'magit-status
   "q" 'update-packages
   "w" 'window-mode/body
   "e" 'helm-find-files
