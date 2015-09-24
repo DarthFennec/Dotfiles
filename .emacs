@@ -1,3 +1,22 @@
+;;;; TODO List
+
+;;; evil bindings in magit
+;;; evil bindings in man
+
+;;; update function should delete old packages
+;;; indentation should be highlighted properly
+;;; modeline should look nicer
+
+;;; evil insert/paste should work in term-mode
+;;; evil ex line should use Helm
+
+;;; buffer list should be cleaner (temp buffers should autoclose?)
+;;; projectile open project should be less restrictive somehow?
+;;; alternate way to reload config?
+;;; add col 80 ruler?
+
+;;; highlighting at column 0 should not overflow to linum
+
 ;;;; Packages
 
 ;;; Archive List
@@ -74,26 +93,31 @@
  '(vc-follow-symlinks t)
  '(require-final-newline t)
  '(inhibit-startup-screen t)
+ '(evil-leader/in-all-states t)
  ;; Better Display
  '(show-paren-mode t)
  '(column-number-mode t)
  '(elscreen-display-tab nil)
  '(whitespace-style '(face lines-tail trailing tab-mark))
- ;; Indentation
+ ;; Indentation And Fill
+ '(dtrt-indent-max-merge-deviation 0.01)
  '(dtrt-indent-mode t)
  '(indent-tabs-mode nil)
+ '(fill-column 80)
+ '(sentence-end-double-space nil)
  ;; Autosaves And Backups
  '(auto-save-list-file-prefix autosave-dir)
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
  '(backup-directory-alist `((".*" . ,backup-dir)))
- ;; Multiterm
+ ;; Terminal
  '(multi-term-program "/bin/zsh")
+ '(Man-notify-method 'pushy)
  ;; Helm
  '(helm-boring-buffer-regexp-list
    '("\\` " "\\*helm" "\\*messages\\*" "\\*help\\*" "\\*backtrace\\*"
      "\\*faces\\*" "\\*completions\\*" "\\*customize" "\\*packages\\*"
      "\\*compile-log\\*" "\\*man" "\\*tramp" "\\*warnings\\*"
-     "\\*magit" "\\*info\\*")))
+     "\\*magit" "\\*info\\*" "\\*dtrt")))
 
 ;;; Hook Editing Via Term-Mode
 (when (require 'term nil t)
@@ -110,7 +134,9 @@
         (cond ((= command-code ?e)
                (save-excursion (find-file-other-window argument)))
               ((= command-code ?x)
-               (save-excursion (find-file argument))))))))
+               (save-excursion (find-file argument)))
+              ((= command-code ?m)
+               (save-excursion (man argument))))))))
 
 ;;; Auto Open As Root
 (defadvice find-file (after find-file-sudo activate)
@@ -254,6 +280,9 @@
 
 ;;; Automatic Indentation
 (define-key global-map (kbd "RET") 'newline-and-indent)
+
+;;; Ex Bindings Everywhere
+(define-key global-map (kbd "C-;") 'evil-ex)
 
 ;;; Helm M-x
 (global-set-key (kbd "M-x") 'helm-M-x)
