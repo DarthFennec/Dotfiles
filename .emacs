@@ -188,6 +188,16 @@
 
 ;;;; Keybindings
 
+;;; Ease Bindings
+(defmacro bindall (fun premaps &rest bnds)
+  (let* ((m (lambda (x)
+              (case x ((N) 'evil-normal-state-map) ((V) 'evil-visual-state-map)
+                    ((M) 'evil-motion-state-map) ((I) 'evil-insert-state-map)
+                    ((R) 'evil-replace-state-map) (t x))))
+         (maps (mapcar m premaps))
+         (pairs (mapcan (lambda (x) (mapcar (lambda (y) `(,y ,x)) maps)) bnds)))
+    `(progn ,@(mapcar (lambda (x) `(,fun ,(car x) ,@(cadr x))) pairs))))
+
 ;;; Custom Ex Commands
 (evil-ex-define-cmd "k[ill-buffer]" 'kill-this-buffer)
 
@@ -223,54 +233,31 @@
 
 ;;; Escape Sequence
 (key-chord-mode 1)
-(key-chord-define evil-insert-state-map "jk" 'evil-normal-state)
-(key-chord-define evil-visual-state-map "jk" 'evil-normal-state)
-(key-chord-define evil-replace-state-map "jk" 'evil-normal-state)
-(key-chord-define minibuffer-local-map "jk" 'helm-like-unite/body)
+(bindall key-chord-define (I V R) ("jk" 'evil-normal-state))
 
 ;;; Swap Colon And Semicolon
-(define-key evil-normal-state-map ";" 'evil-ex)
-(define-key evil-normal-state-map ":" 'evil-repeat-find-char)
-(define-key evil-visual-state-map ";" 'evil-ex)
-(define-key evil-visual-state-map ":" 'evil-repeat-find-char)
-(define-key evil-motion-state-map ";" 'evil-ex)
-(define-key evil-motion-state-map ":" 'evil-repeat-find-char)
+(bindall define-key (N V M) (";" 'evil-ex) (":" 'evil-repeat-find-char))
 
 ;;; Show Current File Path
-(defun show-file-path () (interactive) (message (buffer-file-name)))
-(define-key evil-normal-state-map (kbd "C-g") 'evil-show-file-info)
-(define-key evil-visual-state-map (kbd "C-g") 'evil-show-file-info)
-(define-key evil-motion-state-map (kbd "C-g") 'evil-show-file-info)
-(define-key evil-insert-state-map (kbd "C-g") 'evil-show-file-info)
-(define-key evil-replace-state-map (kbd "C-g") 'evil-show-file-info)
+(bindall define-key (N V M I R) ((kbd "C-g") 'evil-show-file-info))
 
 ;;; Yank Rest Of Line
-(defun yank-line-rest () (interactive) (evil-yank (point) (point-at-eol)))
-(define-key evil-normal-state-map "Y" 'yank-line-rest)
-(define-key evil-motion-state-map "Y" 'yank-line-rest)
+(defun evil-yank-line-rest () (interactive) (evil-yank (point) (point-at-eol)))
+(bindall define-key (N M) ("Y" 'evil-yank-line-rest))
 
 ;;; C-w In Insert Mode
-(define-key evil-insert-state-map (kbd "C-w") 'evil-window-map)
-(define-key evil-replace-state-map (kbd "C-w") 'evil-window-map)
+(bindall define-key (I R) ((kbd "C-w") 'evil-window-map))
 
 ;;; Window Jumps Column Zero
-(defmacro jump-and-zero (jmp)
-  `(lambda () (interactive) (,jmp) (evil-beginning-of-line)))
-(define-key evil-normal-state-map "H" (jump-and-zero evil-window-top))
-(define-key evil-normal-state-map "M" (jump-and-zero evil-window-middle))
-(define-key evil-normal-state-map "L" (jump-and-zero evil-window-bottom))
-(define-key evil-visual-state-map "H" (jump-and-zero evil-window-top))
-(define-key evil-visual-state-map "M" (jump-and-zero evil-window-middle))
-(define-key evil-visual-state-map "L" (jump-and-zero evil-window-bottom))
-(define-key evil-motion-state-map "H" (jump-and-zero evil-window-top))
-(define-key evil-motion-state-map "M" (jump-and-zero evil-window-middle))
-(define-key evil-motion-state-map "L" (jump-and-zero evil-window-bottom))
+(defmacro jmp-zero (jmp)
+  `(lambda () (interactive)
+     (,(intern (concat "evil-window-" jmp))) (evil-beginning-of-line)))
+(bindall define-key (N V M)
+ ("H" (jmp-zero "top")) ("M" (jmp-zero "middle")) ("L" (jmp-zero "bottom")))
 
 ;;; Evil Numbers
-(define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
-(define-key evil-normal-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
-(define-key evil-visual-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
-(define-key evil-visual-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
+(bindall define-key (N V)
+ ((kbd "C-a") 'evil-numbers/inc-at-pt) ((kbd "C-s") 'evil-numbers/dec-at-pt))
 
 ;;; Helm More Evil Motions
 (define-key helm-map (kbd "C-j") 'helm-next-line)
