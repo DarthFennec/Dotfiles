@@ -114,13 +114,17 @@
  ;; Terminal
  '(multi-term-program "/bin/zsh")
  '(Man-notify-method 'pushy)
+ ;; Popwin
+ '(popwin:special-display-config
+   '((help-mode :dedicated t)
+     (messages-buffer-mode :dedicated t)
+     ("^\\*helm[- ].+\\*$" :regexp t :dedicated t)
+     ("^\\*magit:.+\\*$" :regexp t :dedicated t)))
  ;; Helm
+ '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list
-   '("\\` ")))
- ;;   '("\\` " "\\*helm" "\\*messages\\*" "\\*help\\*" "\\*backtrace\\*"
- ;;     "\\*faces\\*" "\\*completions\\*" "\\*customize" "\\*packages\\*"
- ;;     "\\*compile-log\\*" "\\*man" "\\*tramp" "\\*warnings\\*"
- ;;     "\\*magit" "\\*info\\*" "\\*dtrt")))
+   '("^ " "^\\*Help\\*$" "^\\*Messages\\*$"
+     "^\\*helm[- ].+\\*$" "^\\*magit:.+\\*$")))
 
 ;;; Hook Editing Via Term-Mode
 (when (require 'term nil t)
@@ -157,9 +161,9 @@
 (menu-bar-mode -1)
 (scroll-bar-mode -1)
 
-;;; Bury Scratch And Messages Instead Of Killing
+;;; Bury Scratch Instead Of Killing
 (defun kill-buffer-query-functions-maybe-bury ()
-  (if (member (buffer-name (current-buffer)) '("*scratch*" "*Messages*"))
+  (if (equal (buffer-name (current-buffer)) "*scratch*")
       (progn (bury-buffer) nil) t))
 (add-hook 'kill-buffer-query-functions 'kill-buffer-query-functions-maybe-bury)
 
@@ -202,11 +206,12 @@
 
 ;;; Ease Bindings
 (defmacro bindall (fun premaps &rest bnds)
-  (let* ((m (lambda (x)
-              (case x ((N) 'evil-normal-state-map) ((V) 'evil-visual-state-map)
-                    ((M) 'evil-motion-state-map) ((I) 'evil-insert-state-map)
-                    ((R) 'evil-replace-state-map) (t x))))
-         (maps (mapcar m premaps))
+  (let* ((maps
+          (mapcar (lambda (x)
+                    (case x
+                      ((N) 'evil-normal-state-map) ((V) 'evil-visual-state-map)
+                      ((M) 'evil-motion-state-map) ((I) 'evil-insert-state-map)
+                      ((R) 'evil-replace-state-map) (t x))) premaps))
          (pairs (mapcan (lambda (x) (mapcar (lambda (y) `(,y ,x)) maps)) bnds)))
     `(progn ,@(mapcar (lambda (x) `(,fun ,(car x) ,@(cadr x))) pairs))))
 
@@ -246,19 +251,14 @@
 ;;; Escape Sequence
 (key-chord-mode 1)
 (bindall key-chord-define (I V R) ("jk" 'evil-normal-state))
+(bindall define-key (I V R) ((kbd "C-g") 'evil-normal-state))
 
 ;;; Swap Colon And Semicolon
 (bindall define-key (N V M) (";" 'evil-ex) (":" 'evil-repeat-find-char))
 
-;;; Show Current File Path
-(bindall define-key (N V M I R) ((kbd "C-g") 'evil-show-file-info))
-
 ;;; Yank Rest Of Line
 (defun evil-yank-line-rest () (interactive) (evil-yank (point) (point-at-eol)))
 (bindall define-key (N M) ("Y" 'evil-yank-line-rest))
-
-;;; C-w In Insert Mode
-(bindall define-key (I R) ((kbd "C-w") 'evil-window-map))
 
 ;;; Window Jumps Column Zero
 (defmacro jmp-zero (jmp)
@@ -271,7 +271,7 @@
 (bindall define-key (N V)
  ((kbd "C-a") 'evil-numbers/inc-at-pt) ((kbd "C-s") 'evil-numbers/dec-at-pt))
 
-;;; Helm More Evil Motions
+;;; Helm Evil Motions
 (define-key helm-map (kbd "C-j") 'helm-next-line)
 (define-key helm-map (kbd "C-k") 'helm-previous-line)
 (define-key helm-map (kbd "C-n") 'helm-execute-persistent-action)
@@ -280,7 +280,8 @@
 ;;; Automatic Indentation
 (define-key global-map (kbd "RET") 'newline-and-indent)
 
-;;; Ex Bindings Everywhere
+;;; C-w And Ex Bindings Everywhere
+(define-key global-map (kbd "C-w") 'evil-window-map)
 (define-key global-map (kbd "C-;") 'evil-ex)
 
 ;;; Helm M-x
@@ -293,9 +294,11 @@
   "g" 'magit-status
   "q" 'update-packages
   "w" 'window-mode/body
+  "a" 'helm-resume
   "e" 'helm-find-files
   "b" 'helm-buffers-list
   "s" 'helm-projectile-ag
   "f" 'helm-projectile-find-file
   "p" 'helm-projectile-switch-project
+  "d" 'evil-show-file-info
   "r" (lambda () (interactive) (load-file "~/.emacs")))
