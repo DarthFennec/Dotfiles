@@ -29,7 +29,7 @@
       '(evil evil-tabs evil-leader evil-numbers
         evil-surround evil-quickscope
         helm helm-ag helm-projectile
-        dtrt-indent multi-term hydra key-chord package-utils magit
+        dtrt-indent multi-term hydra key-chord package-utils magit popwin
         python-mode groovy-mode haskell-mode markdown-mode go-mode
         highlight-quoted highlight-numbers paren-face
         monokai-theme))
@@ -60,6 +60,7 @@
 (require 'evil-numbers)
 (require 'evil-quickscope)
 (require 'evil-surround)
+(require 'popwin)
 (require 'dtrt-indent)
 (require 'whitespace)
 (require 'key-chord)
@@ -77,6 +78,7 @@
 
 ;;; Language Specific Changes
 (add-hook 'haskell-mode-hook 'haskell-indentation-mode)
+(add-to-list 'auto-mode-alist '("README\\.md\\'" . gfm-mode))
 (setq dtrt-indent-hook-mapping-list
       (cons '(groovy-mode c/c++/java c-basic-offset)
             dtrt-indent-hook-mapping-list))
@@ -114,10 +116,11 @@
  '(Man-notify-method 'pushy)
  ;; Helm
  '(helm-boring-buffer-regexp-list
-   '("\\` " "\\*helm" "\\*messages\\*" "\\*help\\*" "\\*backtrace\\*"
-     "\\*faces\\*" "\\*completions\\*" "\\*customize" "\\*packages\\*"
-     "\\*compile-log\\*" "\\*man" "\\*tramp" "\\*warnings\\*"
-     "\\*magit" "\\*info\\*" "\\*dtrt")))
+   '("\\` ")))
+ ;;   '("\\` " "\\*helm" "\\*messages\\*" "\\*help\\*" "\\*backtrace\\*"
+ ;;     "\\*faces\\*" "\\*completions\\*" "\\*customize" "\\*packages\\*"
+ ;;     "\\*compile-log\\*" "\\*man" "\\*tramp" "\\*warnings\\*"
+ ;;     "\\*magit" "\\*info\\*" "\\*dtrt")))
 
 ;;; Hook Editing Via Term-Mode
 (when (require 'term nil t)
@@ -146,10 +149,19 @@
   (unless (and buffer-file-name (file-writable-p buffer-file-name))
     (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
 
+;;; Better Popup Windows
+(popwin-mode 1)
+
 ;;; Disable GUI
 (tool-bar-mode -1)
 (menu-bar-mode -1)
 (scroll-bar-mode -1)
+
+;;; Bury Scratch And Messages Instead Of Killing
+(defun kill-buffer-query-functions-maybe-bury ()
+  (if (member (buffer-name (current-buffer)) '("*scratch*" "*Messages*"))
+      (progn (bury-buffer) nil) t))
+(add-hook 'kill-buffer-query-functions 'kill-buffer-query-functions-maybe-bury)
 
 ;;; Helm And Friends
 (helm-mode 1)
@@ -250,8 +262,8 @@
 
 ;;; Window Jumps Column Zero
 (defmacro jmp-zero (jmp)
-  `(lambda () (interactive)
-     (,(intern (concat "evil-window-" jmp))) (evil-beginning-of-line)))
+  (let ((jmpr (intern (concat "evil-window-" jmp))))
+    `(lambda () (interactive) (,jmpr) (evil-beginning-of-line))))
 (bindall define-key (N V M)
  ("H" (jmp-zero "top")) ("M" (jmp-zero "middle")) ("L" (jmp-zero "bottom")))
 
