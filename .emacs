@@ -8,14 +8,16 @@
 ;;; modeline should look nicer
 
 ;;; evil insert/paste should work in term-mode
-;;; evil ex line should use Helm
+;;; evil surround should be repeatable
+;;; evil ex line should use helm
+;;; helm resume should work with all helm buffers
+;;; electric pair should not happen in ex line
+;;; recursive popwin should behave always
 
 ;;; buffer list should be cleaner (temp buffers should autoclose?)
 ;;; projectile open project should be less restrictive somehow?
 ;;; alternate way to reload config?
 ;;; add col 80 ruler?
-
-;;; highlighting at column 0 should not overflow to linum
 
 ;;;; Packages
 
@@ -61,6 +63,7 @@
 (require 'evil-quickscope)
 (require 'evil-surround)
 (require 'popwin)
+(require 'linum)
 (require 'dtrt-indent)
 (require 'whitespace)
 (require 'key-chord)
@@ -117,14 +120,18 @@
  ;; Popwin
  '(popwin:special-display-config
    '((help-mode :dedicated t)
+     (Buffer-menu-mode :dedicated t)
      (messages-buffer-mode :dedicated t)
+     (completion-list-mode :noselect t :dedicated t)
+     (" *undo-tree*" :width 60 :position right :dedicated t)
      ("^\\*helm[- ].+\\*$" :regexp t :dedicated t)
-     ("^\\*magit:.+\\*$" :regexp t :dedicated t)))
+     (magit-diff-mode :noselect t :width 80 :position right)
+     (magit-status-mode :dedicated t)))
  ;; Helm
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list
-   '("^ " "^\\*Help\\*$" "^\\*Messages\\*$"
-     "^\\*helm[- ].+\\*$" "^\\*magit:.+\\*$")))
+   '("^ " "^\\*Help\\*$" "^\\*Messages\\*$" "^\\*Buffer List\\*$"
+     "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+\\*$")))
 
 ;;; Hook Editing Via Term-Mode
 (when (require 'term nil t)
@@ -197,6 +204,7 @@
 (load-theme 'monokai t)
 
 ;;;; Face Customizations
+(set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
 (dotimes (i 6)
   (set-face-attribute
    (intern (concat "markdown-header-face-" (number-to-string (+ i 1))))
@@ -277,12 +285,10 @@
 (define-key helm-map (kbd "C-n") 'helm-execute-persistent-action)
 (define-key helm-map (kbd "C-p") 'helm-delete-minibuffer-contents)
 
-;;; Automatic Indentation
-(define-key global-map (kbd "RET") 'newline-and-indent)
-
-;;; C-w And Ex Bindings Everywhere
-(define-key global-map (kbd "C-w") 'evil-window-map)
+;;; Ex And C-w Bindings Everywhere
 (define-key global-map (kbd "C-;") 'evil-ex)
+(define-key global-map (kbd "C-w") 'evil-window-map)
+(bindall define-key (I) ((kbd "C-w") 'evil-window-map))
 
 ;;; Helm M-x
 (global-set-key (kbd "M-x") 'helm-M-x)
@@ -294,11 +300,12 @@
   "g" 'magit-status
   "q" 'update-packages
   "w" 'window-mode/body
+  "u" 'undo-tree-visualize
+  "d" 'evil-show-file-info
   "a" 'helm-resume
   "e" 'helm-find-files
   "b" 'helm-buffers-list
   "s" 'helm-projectile-ag
   "f" 'helm-projectile-find-file
   "p" 'helm-projectile-switch-project
-  "d" 'evil-show-file-info
   "r" (lambda () (interactive) (load-file "~/.emacs")))
