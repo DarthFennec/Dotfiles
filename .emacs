@@ -14,7 +14,6 @@
 ;;; electric pair should not happen in ex line
 ;;; recursive popwin should behave always
 
-;;; buffer list should be cleaner (temp buffers should autoclose?)
 ;;; projectile open project should be less restrictive somehow?
 ;;; alternate way to reload config?
 ;;; add col 80 ruler?
@@ -75,6 +74,11 @@
 ;;; Custom Customization File
 (setq custom-file "~/.emacs-custom.el")
 
+(setq my-boring-buffers
+      '("^ " "^\\*Help\\*$" "^\\*Messages\\*$" "^\\*Buffer List\\*$"
+        "^\\*Backtrace\\*$" "^\\*Warnings\\*$"
+        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+\\*$"))
+
 ;;; Autosaves And Backups
 (defvar autosave-dir (expand-file-name "~/.emacs.d/autosave/"))
 (defvar backup-dir (expand-file-name "~/.emacs.d/backup/"))
@@ -120,18 +124,31 @@
  ;; Popwin
  '(popwin:special-display-config
    '((help-mode :dedicated t)
+     (debugger-mode :dedicated t)
      (Buffer-menu-mode :dedicated t)
      (messages-buffer-mode :dedicated t)
      (completion-list-mode :noselect t :dedicated t)
+     ("*Warnings*" :dedicated t)
      (" *undo-tree*" :width 60 :position right :dedicated t)
      ("^\\*helm[- ].+\\*$" :regexp t :dedicated t)
      (magit-diff-mode :noselect t :width 80 :position right)
      (magit-status-mode :dedicated t)))
  ;; Helm
  '(helm-split-window-preferred-function 'ignore)
- '(helm-boring-buffer-regexp-list
-   '("^ " "^\\*Help\\*$" "^\\*Messages\\*$" "^\\*Buffer List\\*$"
-     "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+\\*$")))
+ '(helm-boring-buffer-regexp-list my-boring-buffers))
+
+;;; Keep Temporary Buffers Hidden
+(defvar arrange-buffers t)
+(defun rearrange-buffer-list ()
+  (when arrange-buffers
+    (let ((arrange-buffers nil))
+      (bury-buffer (get-buffer-create "*scratch*"))
+      (dolist (buf (buffer-list))
+        (let ((bufname (buffer-name buf))
+              (bufcheck (lambda (x) (string-match-p x bufname))))
+          (when (some bufcheck my-boring-buffers)
+            (bury-buffer buf)))))))
+(add-hook 'buffer-list-update-hook 'rearrange-buffer-list)
 
 ;;; Hook Editing Via Term-Mode
 (when (require 'term nil t)
