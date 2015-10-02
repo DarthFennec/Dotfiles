@@ -143,7 +143,7 @@
   (when arrange-buffers
     (let ((arrange-buffers nil))
       (bury-buffer (get-buffer-create "*scratch*"))
-      (dolist (buf (buffer-list))
+      (dolist (buf (buffer-list (selected-frame)))
         (let ((bufname (buffer-name buf))
               (bufcheck (lambda (x) (string-match-p x bufname))))
           (when (some bufcheck my-boring-buffers)
@@ -185,10 +185,9 @@
 (menu-bar-mode -1)
 (scroll-bar-mode -1)
 
-;;; Bury Scratch Instead Of Killing
+;;; Do Not Kill Scratch
 (defun kill-buffer-query-functions-maybe-bury ()
-  (if (equal (buffer-name (current-buffer)) "*scratch*")
-      (progn (bury-buffer) nil) t))
+  (not (equal (buffer-name (current-buffer)) "*scratch*")))
 (add-hook 'kill-buffer-query-functions 'kill-buffer-query-functions-maybe-bury)
 
 ;;; Helm And Friends
