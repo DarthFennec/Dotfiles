@@ -3,20 +3,14 @@
 ;;; evil bindings in magit
 ;;; evil bindings in man
 
-;;; update function should delete old packages
-;;; indentation should be highlighted properly
 ;;; modeline should look nicer
 
 ;;; evil insert/paste should work in term-mode
 ;;; evil surround should be repeatable
-;;; evil ex line should use helm
 ;;; helm resume should work with all helm buffers
-;;; electric pair should not happen in ex line
-;;; recursive popwin should behave always
 
-;;; projectile open project should be less restrictive somehow?
-;;; alternate way to reload config?
-;;; add col 80 ruler?
+;;; recursive popwin should behave always?
+;;; evil ex line should use helm?
 
 ;;;; Packages
 
@@ -27,31 +21,49 @@
 
 ;;; Package List
 (setq package-list
-      '(evil evil-tabs evil-leader evil-numbers
-        evil-surround evil-quickscope
+      '(evil evil-tabs evil-leader evil-numbers evil-commentary
+        evil-surround evil-quickscope evil-exchange evil-visualstar
         helm helm-ag helm-projectile
         dtrt-indent multi-term hydra key-chord package-utils magit popwin
         python-mode groovy-mode haskell-mode markdown-mode go-mode
-        highlight-quoted highlight-numbers paren-face
+        highlight-quoted highlight-numbers paren-face fill-column-indicator
         monokai-theme))
 
 ;;; Package Maintenance
 (defun update-packages () (interactive)
   ;; refresh package list
   (package-refresh-contents)
-  ;; clean
   ;; install
   (dolist (package package-list)
     (unless (package-installed-p package)
       (package-install package)))
   ;; upgrade
   (package-utils-upgrade-all-no-fetch)
+  ;; clean
+  (let ((curr nil)
+        (from package-list)
+        (to nil))
+    (while from
+      (setq curr (car from))
+      (setq from (cdr from))
+      (setq to (cons curr to))
+      (dolist (dep (package-desc-reqs (cadr (assoc curr package-alist))))
+        (unless (or (package-built-in-p (car dep))
+                    (member (car dep) from) (member (car dep) to))
+          (setq from (cons (car dep) from)))))
+    (dolist (pack (mapcar #'car package-alist))
+      (when (and (package-installed-p pack)
+                 (not (package-built-in-p pack)) (not (member pack to)))
+        (package-utils-remove-by-name pack))))
   ;; clear the minibuffer
   (message nil))
 
 ;;; Initialize
 (require 'package)
 (package-initialize)
+
+;;; Add Custom Load Path
+(add-to-list 'load-path "~/.emacs.d/lisp/")
 
 ;;; Requires
 (require 'helm)
@@ -61,9 +73,14 @@
 (require 'evil-numbers)
 (require 'evil-quickscope)
 (require 'evil-surround)
+(require 'evil-exchange)
+(require 'evil-visualstar)
+(require 'evil-commentary)
 (require 'popwin)
 (require 'linum)
 (require 'dtrt-indent)
+(require 'highlight-indent-guides)
+(require 'fill-column-indicator)
 (require 'whitespace)
 (require 'key-chord)
 (require 'multi-term)
@@ -76,8 +93,9 @@
 
 (setq my-boring-buffers
       '("^ " "^\\*Help\\*$" "^\\*Messages\\*$" "^\\*Buffer List\\*$"
-        "^\\*Backtrace\\*$" "^\\*Warnings\\*$"
-        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+\\*$"))
+        "^\\*Backtrace\\*$" "^\\*Warnings\\*$" "^\\*Man .*\\*$"
+        "^\\*Compile-Log\\*$"
+        "^\\*helm[- ].+\\*$"  "^\\*magit: .+$" "^\\*magit-\\w+: .+\\*$"))
 
 ;;; Autosaves And Backups
 (defvar autosave-dir (expand-file-name "~/.emacs.d/autosave/"))
@@ -102,12 +120,12 @@
  '(vc-follow-symlinks t)
  '(require-final-newline t)
  '(inhibit-startup-screen t)
- '(evil-leader/in-all-states t)
  ;; Better Display
  '(show-paren-mode t)
  '(column-number-mode t)
  '(elscreen-display-tab nil)
  '(whitespace-style '(face lines-tail trailing tab-mark))
+ '(mouse-avoidance-mode 'banish)
  ;; Indentation And Fill
  '(dtrt-indent-max-merge-deviation 0.01)
  '(dtrt-indent-mode t)
@@ -126,12 +144,14 @@
    '((help-mode :dedicated t)
      (debugger-mode :dedicated t)
      (Buffer-menu-mode :dedicated t)
+     (compilation-mode :dedicated t)
      (messages-buffer-mode :dedicated t)
      (completion-list-mode :noselect t :dedicated t)
      ("*Warnings*" :dedicated t)
      (" *undo-tree*" :width 60 :position right :dedicated t)
      ("^\\*helm[- ].+\\*$" :regexp t :dedicated t)
      (magit-diff-mode :noselect t :width 80 :position right)
+     (magit-revision-mode :noselect t :width 80 :position right)
      (magit-status-mode :dedicated t)))
  ;; Helm
  '(helm-split-window-preferred-function 'ignore)
@@ -187,7 +207,7 @@
 
 ;;; Do Not Kill Scratch
 (defun kill-buffer-query-functions-maybe-bury ()
-  (not (equal (buffer-name (current-buffer)) "*scratch*")))
+  (not (string= (buffer-name (current-buffer)) "*scratch*")))
 (add-hook 'kill-buffer-query-functions 'kill-buffer-query-functions-maybe-bury)
 
 ;;; Helm And Friends
@@ -199,10 +219,15 @@
 (global-evil-leader-mode)
 (evil-mode 1)
 (global-evil-tabs-mode t)
+(global-evil-visualstar-mode t)
+(evil-exchange-install)
+(evil-commentary-mode)
 
 ;;; Highlighting And Misc
 (global-paren-face-mode)
 (global-evil-surround-mode 1)
+(add-hook 'prog-mode-hook 'fci-mode)
+(add-hook 'text-mode-hook 'fci-mode)
 (add-hook 'prog-mode-hook 'linum-mode)
 (add-hook 'text-mode-hook 'linum-mode)
 (add-hook 'prog-mode-hook 'hl-line-mode)
@@ -213,6 +238,8 @@
 (add-hook 'text-mode-hook 'electric-pair-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
+(add-hook 'prog-mode-hook 'highlight-indent-guides-mode)
+(add-hook 'text-mode-hook 'highlight-indent-guides-mode)
 (add-hook 'prog-mode-hook 'turn-on-evil-quickscope-always-mode)
 (add-hook 'text-mode-hook 'turn-on-evil-quickscope-always-mode)
 
@@ -301,13 +328,32 @@
 (define-key helm-map (kbd "C-n") 'helm-execute-persistent-action)
 (define-key helm-map (kbd "C-p") 'helm-delete-minibuffer-contents)
 
-;;; Ex And C-w Bindings Everywhere
+;;; Leader, Ex, And C-w Bindings Everywhere
+(define-key global-map (kbd "C-,") evil-leader--default-map)
 (define-key global-map (kbd "C-;") 'evil-ex)
 (define-key global-map (kbd "C-w") 'evil-window-map)
 (bindall define-key (I) ((kbd "C-w") 'evil-window-map))
 
 ;;; Helm M-x
 (global-set-key (kbd "M-x") 'helm-M-x)
+
+;;; Projectile Switch Project Map
+(defmacro bind-switch-key (key act)
+  `(define-key my-switch-projectile-map ,key
+     (lambda () (interactive)
+       (let ((projectile-switch-project-action ,act))
+         (helm-projectile-switch-project)))))
+(defun my-helm-find-files ()
+  (let ((input (expand-file-name default-directory))
+        (helm-ff-transformer-show-only-basename t))
+    (set-text-properties 0 (length input) nil input)
+    (helm-find-files-1 input)))
+(defvar my-switch-projectile-map (make-sparse-keymap))
+(bind-switch-key "t" 'multi-term)
+(bind-switch-key "g" 'magit-status)
+(bind-switch-key "e" 'my-helm-find-files)
+(bind-switch-key "s" 'helm-projectile-ag)
+(bind-switch-key "f" 'helm-projectile-find-file)
 
 ;;; Leader Bindings
 (evil-leader/set-leader ",")
@@ -316,6 +362,7 @@
   "g" 'magit-status
   "q" 'update-packages
   "w" 'window-mode/body
+  "i" 'dtrt-indent-adapt
   "u" 'undo-tree-visualize
   "d" 'evil-show-file-info
   "a" 'helm-resume
@@ -323,5 +370,10 @@
   "b" 'helm-buffers-list
   "s" 'helm-projectile-ag
   "f" 'helm-projectile-find-file
-  "p" 'helm-projectile-switch-project
-  "r" (lambda () (interactive) (load-file "~/.emacs")))
+  "p" my-switch-projectile-map
+  "c" (lambda () (interactive) (find-file "~/.emacs"))
+  "r" (lambda () (interactive)
+        (do-auto-save t t)
+        (when (string= ".emacs" (buffer-name))
+          (load-file "~/.emacs"))
+        (revert-buffer nil t)))
