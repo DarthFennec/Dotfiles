@@ -1,17 +1,11 @@
 ;;;; TODO List
-;;; evil bindings in man
 ;;; evil bindings in magit
 ;;; helm modeline should be pretty
-;;; modeline should have more colors
 ;;; recursive popwin should behave always
 ;;; evil surround should be repeatable always
 ;;; evil insert/paste should work in term-mode
 ;;; helm resume should work with all helm buffers
-;;; return should enter directory in helm find file
-;;; add leader bindings for eval-expression and eval-last-sexp
-;;; help buffer should have evil bindings and modeline immediately
-;;; hitting c-ret or s-ret (not sure which) should wrap current line
-;;; hitting return or o/O in a comment should continue the comment block
+;;; hitting o or O in a comment should continue the comment block
 
 ;;;; Packages
 
@@ -24,9 +18,10 @@
 (setq package-list
       '(monokai-theme
         helm helm-ag helm-projectile
-        evil evil-tabs evil-leader evil-numbers evil-commentary
+        magit gitattributes-mode gitconfig-mode gitignore-mode
+        evil evil-tabs evil-leader evil-numbers evil-commentary evil-space
         evil-surround evil-quickscope evil-exchange evil-visualstar
-        dtrt-indent multi-term hydra key-chord package-utils magit popwin
+        dtrt-indent multi-term hydra key-chord package-utils popwin
         python-mode groovy-mode haskell-mode markdown-mode go-mode
         highlight-quoted highlight-numbers paren-face fill-column-indicator))
 
@@ -78,6 +73,7 @@
 (require 'evil-exchange)
 (require 'evil-visualstar)
 (require 'evil-commentary)
+(require 'evil-space)
 (require 'popwin)
 (require 'linum)
 (require 'dtrt-indent)
@@ -85,11 +81,17 @@
 (require 'fill-column-indicator)
 (require 'whitespace)
 (require 'key-chord)
+(require 'magit)
+(require 'woman)
+(require 'man)
 (require 'term)
 (require 'multi-term)
 (require 'markdown-mode)
 
 ;;;; Behavior
+
+;; temporary, as Ubuntu's git version is too old
+(setq magit--minimal-git "1.9.0")
 
 ;;; Custom Customization File
 (setq custom-file "~/.emacs-custom.el")
@@ -109,6 +111,9 @@
 (add-to-list 'auto-mode-alist '("README\\.md$" . gfm-mode))
 (add-to-list 'dtrt-indent-hook-mapping-list
              '(groovy-mode c/c++/java c-basic-offset))
+
+(add-hook 'Man-mode-hook 'evil-motion-state)
+(add-hook 'help-mode-hook 'evil-motion-state)
 
 ;;; Set Custom Variables
 (custom-set-variables
@@ -147,18 +152,18 @@
  '(helm-boring-buffer-regexp-list my-boring-buffers)
  ;; Popwin
  '(popwin:special-display-config
-   '((help-mode :dedicated t)
-     (debugger-mode :dedicated t)
-     (Buffer-menu-mode :dedicated t)
-     (compilation-mode :dedicated t)
-     (messages-buffer-mode :dedicated t)
+   '((help-mode)
+     (debugger-mode)
+     (Buffer-menu-mode)
+     (compilation-mode)
+     (messages-buffer-mode)
      ("*helm-mode-completion-at-point*" :noselect t)
-     ("*Warnings*" :dedicated t)
-     (" *undo-tree*" :width 60 :position right :dedicated t)
-     ("^\\*helm[- ].+\\*$" :regexp t :dedicated t)
+     ("*Warnings*")
+     (" *undo-tree*" :width 60 :position right)
+     ("^\\*helm[- ].+\\*$" :regexp t)
      (magit-diff-mode :noselect t :width 80 :position right)
      (magit-revision-mode :noselect t :width 80 :position right)
-     (magit-status-mode :dedicated t))))
+     (magit-status-mode))))
 
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name disable)
@@ -213,6 +218,11 @@
   (unless (or (not filename) (file-writable-p filename))
     (setq filename (concat "/sudo::" (expand-file-name filename)))))
 
+;;; Remove Dot Files From Helm Find File
+(defadvice helm-ff-filter-candidate-one-by-one
+    (around helm-hide-dot-files (file) activate)
+  (unless (string-match-p "/\\.\\.?$" file) ad-do-it))
+
 ;;; Better Popup Windows
 (popwin-mode 1)
 
@@ -230,6 +240,7 @@
 (global-evil-leader-mode 1)
 (evil-mode 1)
 (evil-commentary-mode 1)
+(evil-space-mode 1)
 (global-evil-tabs-mode 1)
 (global-evil-surround-mode 1)
 (global-evil-visualstar-mode 1)
@@ -262,7 +273,7 @@
 (set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
 (dotimes (i 6)
   (set-face-attribute
-   (intern (concat "markdown-header-face-" (number-to-string (+ i 1))))
+   (intern (concat "markdown-header-face-" (number-to-string (1+ i))))
    nil :height 'unspecified))
 
 ;;;; Modeline
@@ -379,8 +390,8 @@
 (bindall key-chord-define (I V R) ("jk" 'evil-normal-state))
 (bindall define-key (I V R) ((kbd "C-g") 'evil-normal-state))
 
-;;; Swap Colon And Semicolon
-(bindall define-key (N V M) (";" 'evil-ex) (":" 'evil-repeat-find-char))
+;;; Bind Semicolon To Evil Ex
+(bindall define-key (N V M) (";" 'evil-ex))
 
 ;;; Yank Rest Of Line
 (defun evil-yank-line-rest () (interactive) (evil-yank (point) (point-at-eol)))
@@ -398,6 +409,10 @@
          ((kbd "C-a") 'evil-numbers/inc-at-pt)
          ((kbd "C-s") 'evil-numbers/dec-at-pt))
 
+;;; Man Quit Kills Buffer
+(define-key Man-mode-map "q" 'Man-kill)
+(define-key woman-mode-map "q" 'Man-kill)
+
 ;;; Helm Evil Motions
 (define-key helm-map (kbd "C-j") 'helm-next-line)
 (define-key helm-map (kbd "C-k") 'helm-previous-line)
@@ -413,17 +428,38 @@
 ;;; Helm M-x
 (define-key global-map (kbd "M-x") 'helm-M-x)
 
+;;; Newline Auto Comment
+(evil-define-key 'insert prog-mode-map (kbd "RET") 'comment-indent-new-line)
+(evil-define-key 'insert text-mode-map (kbd "RET") 'comment-indent-new-line)
+
+;;; C-RET Fills Current Line
+(defun fill-current-line ()
+  (interactive)
+  (fill-region (line-beginning-position) (line-end-position)))
+(bindall define-key (N R I) ((kbd "<C-return>") 'fill-current-line))
+
+;;; Better Helm Navigation
+(defun my-helm-navigate ()
+  (interactive)
+  (if (file-directory-p (helm-get-selection))
+      (helm-execute-persistent-action)
+    (helm-maybe-exit-minibuffer)))
+(define-key helm-find-files-map (kbd "RET") 'my-helm-navigate)
+(define-key helm-find-files-map (kbd "<C-return>") 'my-helm-navigate)
+
 ;;; Projectile Switch Project Map
 (defmacro bind-switch-key (key act)
   `(define-key my-switch-projectile-map ,key
      (lambda () (interactive)
        (let ((projectile-switch-project-action ,act))
          (helm-projectile-switch-project)))))
+
 (defun my-helm-find-files ()
   (let ((input (expand-file-name default-directory))
         (helm-ff-transformer-show-only-basename t))
     (set-text-properties 0 (length input) nil input)
     (helm-find-files-1 input)))
+
 (defvar my-switch-projectile-map (make-sparse-keymap))
 (bind-switch-key "t" 'multi-term)
 (bind-switch-key "g" 'magit-status)
@@ -449,7 +485,14 @@
   "p" my-switch-projectile-map
   "c" (lambda () (interactive) (find-file "~/.emacs"))
   "r" (lambda () (interactive)
-        (do-auto-save t t)
-        (when (string= ".emacs" (buffer-name))
-          (load-file "~/.emacs"))
-        (revert-buffer nil t)))
+        (when (buffer-file-name)
+          (do-auto-save t t)
+          (when (string= ".emacs" (buffer-name))
+            (load-file "~/.emacs"))
+          (revert-buffer nil t)))
+  "v" 'eval-expression
+  "x" (lambda () (interactive)
+        (if (string= "*scratch*" (buffer-name))
+            (let ((current-prefix-arg 0))
+              (call-interactively 'eval-print-last-sexp))
+          (eval-last-sexp nil))))
