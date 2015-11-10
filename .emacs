@@ -1,11 +1,14 @@
 ;;;; TODO List
-;;; evil bindings in magit
 ;;; helm modeline should be pretty
+;;; find a way to dwim words vs symbols
 ;;; recursive popwin should behave always
 ;;; evil surround should be repeatable always
-;;; evil insert/paste should work in term-mode
 ;;; helm resume should work with all helm buffers
+;;; opening help should not weird out my current buffer
 ;;; hitting o or O in a comment should continue the comment block
+
+;;; evil-space should work the first time I try to use it (?)
+;;; in c/c++/java type modes all curly braces should autopair (?)
 
 ;;;; Packages
 
@@ -18,11 +21,11 @@
 (setq package-list
       '(monokai-theme
         helm helm-ag helm-projectile
-        magit gitattributes-mode gitconfig-mode gitignore-mode
+        magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
         evil evil-tabs evil-leader evil-numbers evil-commentary evil-space
         evil-surround evil-quickscope evil-exchange evil-visualstar
         dtrt-indent multi-term hydra key-chord package-utils popwin
-        python-mode groovy-mode haskell-mode markdown-mode go-mode
+        python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
         highlight-quoted highlight-numbers paren-face fill-column-indicator))
 
 ;;; Package Maintenance
@@ -65,6 +68,7 @@
 ;;; Requires
 (require 'helm)
 (require 'helm-config)
+(require 'magit)
 (require 'evil-leader)
 (require 'evil)
 (require 'evil-numbers)
@@ -74,6 +78,7 @@
 (require 'evil-visualstar)
 (require 'evil-commentary)
 (require 'evil-space)
+(require 'evil-magit)
 (require 'popwin)
 (require 'linum)
 (require 'dtrt-indent)
@@ -81,7 +86,6 @@
 (require 'fill-column-indicator)
 (require 'whitespace)
 (require 'key-chord)
-(require 'magit)
 (require 'woman)
 (require 'man)
 (require 'term)
@@ -96,10 +100,12 @@
 ;;; Custom Customization File
 (setq custom-file "~/.emacs-custom.el")
 
+;;; Buffers To Hide
 (setq my-boring-buffers
       '("^ " "^\\*Help\\*$" "^\\*Messages\\*$" "^\\*Buffer List\\*$"
         "^\\*Backtrace\\*$" "^\\*Warnings\\*$" "^\\*WoMan-Log\\*$"
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
+        "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
         "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
 
 ;;; Autosaves And Backups
@@ -112,42 +118,49 @@
 (add-to-list 'dtrt-indent-hook-mapping-list
              '(groovy-mode c/c++/java c-basic-offset))
 
+;;; Mode Specific Changes
 (add-hook 'Man-mode-hook 'evil-motion-state)
 (add-hook 'help-mode-hook 'evil-motion-state)
+(add-hook 'package-menu-mode-hook 'evil-motion-state)
+(add-hook 'messages-buffer-mode-hook 'evil-motion-state)
+(add-hook 'magit-status-mode-hook 'evil-motion-state)
+(evil-set-initial-state #'package-menu-mode 'motion)
+(evil-set-initial-state #'messages-buffer-mode 'motion)
 
 ;;; Set Custom Variables
 (custom-set-variables
- ;; Projectile Settings
- '(projectile-enable-caching t)
- '(projectile-completion-system 'helm)
- ;; Better Scrolling
- '(scroll-step 1)
- '(scroll-conservatively 10000)
  ;; Better Behavior
+ '(scroll-conservatively 101)
  '(vc-follow-symlinks t)
  '(require-final-newline t)
  '(inhibit-startup-screen t)
  '(mouse-avoidance-mode 'banish)
+ '(make-pointer-invisible nil)
+ '(evil-want-fine-undo 'no)
+ '(magit-push-always-verify nil)
+ '(sentence-end-double-space nil)
+ '(multi-term-program "/bin/zsh")
+ '(multi-term-switch-after-close nil)
+ '(Man-notify-method 'pushy)
  ;; Better Display
  '(show-paren-mode t)
  '(column-number-mode t)
  '(elscreen-display-tab nil)
  '(whitespace-style '(face lines-tail trailing tab-mark))
- ;; Indentation And Fill
+ ;; Indentation
+ '(indent-tabs-mode nil)
  '(dtrt-indent-max-merge-deviation 0.01)
  '(dtrt-indent-mode t)
- '(indent-tabs-mode nil)
+ ;; Fill
  '(fill-column 80)
- '(truncate-partial-width-windows nil)
- '(sentence-end-double-space nil)
+ '(whitespace-line-column nil)
+ '(fci-handle-truncate-lines nil)
  ;; Autosaves And Backups
  '(auto-save-list-file-prefix autosave-dir)
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
  '(backup-directory-alist `((".*" . ,backup-dir)))
- ;; Terminal
- '(multi-term-program "/bin/zsh")
- '(Man-notify-method 'pushy)
  ;; Helm
+ '(projectile-completion-system 'helm)
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
  ;; Popwin
@@ -159,6 +172,8 @@
      (messages-buffer-mode)
      ("*helm-mode-completion-at-point*" :noselect t)
      ("*Warnings*")
+     ("*evil-marks*")
+     ("*evil-registers*")
      (" *undo-tree*" :width 60 :position right)
      ("^\\*helm[- ].+\\*$" :regexp t)
      (magit-diff-mode :noselect t :width 80 :position right)
@@ -177,9 +192,9 @@
   `(defadvice ,funcname (around ,advname activate)
      (ad-enable-advice 'buffer-name 'after 'boring-buffer-name)
      (ad-activate 'buffer-name)
-     ad-do-it
-     (ad-disable-advice 'buffer-name 'after 'boring-buffer-name)
-     (ad-activate 'buffer-name)))
+     (unwind-protect ad-do-it
+       (ad-disable-advice 'buffer-name 'after 'boring-buffer-name)
+       (ad-activate 'buffer-name))))
 
 (make-boring-advice record-window-buffer record-window-no-boring-buffer)
 (make-boring-advice switch-to-prev-buffer switch-to-prev-no-boring-buffer)
@@ -190,28 +205,27 @@
 (make-boring-advice mouse-buffer-menu-alist mouse-no-boring-buffer-menu-alist)
 
 ;;; Do Not Kill Scratch
-(defun kill-buffer-query-functions-maybe-bury ()
+(defun my-save-scratch-buffer ()
   (not (string= (buffer-name (current-buffer)) "*scratch*")))
-(add-hook 'kill-buffer-query-functions 'kill-buffer-query-functions-maybe-bury)
+(add-hook 'kill-buffer-query-functions 'my-save-scratch-buffer)
 
 ;;; Hook Editing Via Term-Mode
+(defvar-local my-term-prev-match nil)
 (defadvice term-handle-ansi-terminal-messages
     (before handle-custom-ansi-terminal-messages activate)
-  (save-match-data
-    (when (string-match "\eAnSiT.+\n" message)
-      (let* ((start (match-beginning 0))
-             (end (match-end 0))
-             (command-code (aref message (+ start 6)))
-             (argument
-              (save-match-data
-                (substring message (+ start 8)
-                           (string-match "\r?\n" message (+ start 8))))))
-        (cond ((= command-code ?e)
-               (save-excursion (find-file-other-window argument)))
-              ((= command-code ?x)
-               (save-excursion (find-file argument)))
-              ((= command-code ?m)
-               (save-excursion (man argument))))))))
+  (when my-term-prev-match
+    (setq message (concat my-term-prev-match message))
+    (setq my-term-prev-match nil))
+  (when (string-match "\eAnSiT.[ \t]*[^\r\n]*\r?\\'" message)
+    (setq my-term-prev-match (substring message (match-beginning 0)))
+    (setq message (replace-match "" t t message)))
+  (when (string-match "\eAnSiT\\(.\\)[ \t]*\\([^\r\n]*\\)\r?\n" message)
+    (let* ((command-code (aref message (match-beginning 1)))
+           (argument (substring message (match-beginning 2) (match-end 2))))
+      (save-excursion
+        (cond ((= command-code ?e) (find-file-other-window argument))
+              ((= command-code ?x) (find-file argument))
+              ((= command-code ?m) (man argument)))))))
 
 ;;; Auto Open As Root
 (defadvice find-file-noselect (before find-file-sudo activate)
@@ -222,9 +236,6 @@
 (defadvice helm-ff-filter-candidate-one-by-one
     (around helm-hide-dot-files (file) activate)
   (unless (string-match-p "/\\.\\.?$" file) ad-do-it))
-
-;;; Better Popup Windows
-(popwin-mode 1)
 
 ;;; Disable GUI
 (tool-bar-mode -1)
@@ -239,13 +250,17 @@
 ;;; Evil And Friends
 (global-evil-leader-mode 1)
 (evil-mode 1)
-(evil-commentary-mode 1)
-(evil-space-mode 1)
+(key-chord-mode 1)
 (global-evil-tabs-mode 1)
+
+;;; Other Helpful Modes
+(popwin-mode 1)
+(evil-space-mode 1)
+(evil-commentary-mode 1)
 (global-evil-surround-mode 1)
 (global-evil-visualstar-mode 1)
+(global-evil-quickscope-mode 1)
 (evil-exchange-install)
-(key-chord-mode 1)
 
 ;;; Highlighting And Misc
 (global-paren-face-mode 1)
@@ -263,8 +278,6 @@
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
 (add-hook 'prog-mode-hook 'highlight-indent-guides-mode)
 (add-hook 'text-mode-hook 'highlight-indent-guides-mode)
-(add-hook 'prog-mode-hook 'turn-on-evil-quickscope-always-mode)
-(add-hook 'text-mode-hook 'turn-on-evil-quickscope-always-mode)
 
 ;;; Load Theme
 (load-theme 'monokai t)
@@ -278,12 +291,24 @@
 
 ;;;; Modeline
 
+;;; Track The Selected Window
+(defvar my-mode-line-selected-window nil)
+(defun set-my-mode-line-selected-window (windows)
+  (when (not (minibuffer-window-active-p (frame-selected-window)))
+    (setq my-mode-line-selected-window (selected-window))))
+(add-function :before pre-redisplay-function #'set-my-mode-line-selected-window)
+
+;;; Draw The Modeline
 (defvar-local my-indent-offset '(nil . nil))
+
 (defun get-modeline-left ()
   (unless (eq major-mode (car my-indent-offset))
     (let ((offset (caddr (dtrt-indent--search-hook-mapping major-mode))))
       (setq my-indent-offset (cons major-mode offset))))
-  (let* ((state (cond (defining-kbd-macro      " RECORD   ")
+  (let* ((is-record-state (and defining-kbd-macro
+                               (eq my-mode-line-selected-window
+                                   (selected-window))))
+         (state (cond (is-record-state         " RECORD   ")
                       ((evil-normal-state-p)   " NORMAL   ")
                       ((evil-visual-state-p)   " VISUAL   ")
                       ((evil-insert-state-p)   " INSERT   ")
@@ -291,11 +316,10 @@
                       ((evil-motion-state-p)   " MOTION   ")
                       ((evil-operator-state-p) " OPERATOR ")
                       (t                       " EMACS    ")))
-         (buf (buffer-name))
-         (mod (if (buffer-modified-p) "* " "  "))
+         (buf (concat (buffer-name) (if (buffer-modified-p) "*" " ") " "))
          (ro (if buffer-read-only "[RO]" nil))
          (su (if (and buffer-file-name
-                      (file-remote-p (buffer-file-name))) "[SU]" nil))
+                      (file-remote-p buffer-file-name)) "[SU]" nil))
          (rosu (if (and (null ro) (null su)) "" (concat ro su " ")))
          (mmode (concat (symbol-name major-mode) " "))
          (offs (number-to-string (symbol-value (cdr my-indent-offset))))
@@ -307,23 +331,25 @@
          (encode (concat "[" coding ":" eol "]"))
          (dir (if (projectile-project-p) (projectile-project-name)
                 (file-name-base (directory-file-name default-directory))))
-         (proj (concat "[" dir vc-mode "]")))
-    (add-text-properties 0 (length state) '(face mode-line-emphasis) state)
-    (add-text-properties 0 (length buf) '(face mode-line-buffer-id) buf)
-    (add-text-properties 0 1 '(face mode-line-emphasis) mod)
-    (add-text-properties 0 (length mmode) '(face mode-line-emphasis) mmode)
+         (proj (concat "[" dir vc-mode "]"))
+         (emph '(face mode-line-emphasis)))
+    (add-text-properties 0 (- (length buf) 2) '(face mode-line-buffer-id) buf)
+    (add-text-properties (- (length buf) 2) (length buf) emph buf)
+    (add-text-properties 0 (length state) emph state)
+    (add-text-properties 0 (length mmode) emph mmode)
     (set-text-properties 0 (length proj) nil proj)
-    (list state buf mod rosu mmode indent encode proj)))
+    (list state buf rosu mmode indent encode proj)))
 
 (defun get-modeline-right ()
-  (let ((perc (format-mode-line "%p")))
+  (let ((perc (format-mode-line "%p"))
+        (size (format-mode-line " (%l,%c) ")))
     (when (string= perc "Bottom") (setq perc "Bot"))
     (when (string-match-p "[0-9]+%$" perc) (setq perc (concat perc "%")))
-    (concat (format-mode-line "(%l,%c) ") perc " " elscreen-mode-line-string)))
+    (concat size perc " " elscreen-mode-line-string " ")))
 
 (defun draw-modeline (lefts right)
   (let* ((lefts (reverse lefts))
-         (max (- (window-width) (length (format-mode-line right))))
+         (max (- (window-total-width) (length (format-mode-line right))))
          (sizes (mapcar #'length lefts))
          (size (-sum sizes)))
     (while (and lefts (> size max))
@@ -341,17 +367,6 @@
 (kill-buffer "*Messages*")
 
 ;;;; Keybindings
-
-;;; Ease Bindings
-(defmacro bindall (fun premaps &rest bnds)
-  (let* ((maps
-          (mapcar (lambda (x)
-                    (case x
-                      ((N) 'evil-normal-state-map) ((V) 'evil-visual-state-map)
-                      ((M) 'evil-motion-state-map) ((I) 'evil-insert-state-map)
-                      ((R) 'evil-replace-state-map) (t x))) premaps))
-         (pairs (mapcan (lambda (x) (mapcar (lambda (y) `(,y ,x)) maps)) bnds)))
-    `(progn ,@(mapcar (lambda (x) `(,fun ,(car x) ,@(cadr x))) pairs))))
 
 ;;; Custom Ex Commands
 (evil-ex-define-cmd "k[ill-buffer]" 'kill-this-buffer)
@@ -386,28 +401,65 @@
   ("," evil-window-decrease-width)
   ("q" nil))
 
-;;; Escape Sequence
-(bindall key-chord-define (I V R) ("jk" 'evil-normal-state))
-(bindall define-key (I V R) ((kbd "C-g") 'evil-normal-state))
+;;; Escape Sequences
+(key-chord-define evil-insert-state-map "jk" 'evil-normal-state)
+(key-chord-define evil-visual-state-map "jk" 'evil-normal-state)
+(key-chord-define evil-replace-state-map "jk" 'evil-normal-state)
+(define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
+(define-key evil-visual-state-map (kbd "C-g") 'evil-normal-state)
+(define-key evil-replace-state-map (kbd "C-g") 'evil-normal-state)
 
 ;;; Bind Semicolon To Evil Ex
-(bindall define-key (N V M) (";" 'evil-ex))
-
-;;; Yank Rest Of Line
-(defun evil-yank-line-rest () (interactive) (evil-yank (point) (point-at-eol)))
-(bindall define-key (N M) ("Y" 'evil-yank-line-rest))
+(define-key evil-motion-state-map ";" 'evil-ex)
 
 ;;; Window Jumps Column Zero
 (defmacro jmp-zero (jmp)
   `(lambda () (interactive) (,jmp) (evil-beginning-of-line)))
-(bindall define-key (N V M)
-         ("H" (jmp-zero evil-window-top)) ("M" (jmp-zero evil-window-middle))
-         ("L" (jmp-zero evil-window-bottom)))
+(define-key evil-motion-state-map "H" (jmp-zero evil-window-top))
+(define-key evil-motion-state-map "M" (jmp-zero evil-window-middle))
+(define-key evil-motion-state-map "L" (jmp-zero evil-window-bottom))
+
+;;; Window Centers On Long Jump
+(defmacro jmp-center (jmp)
+  `(lambda () (interactive) (,jmp) (evil-scroll-line-to-center nil)))
+(define-key evil-motion-state-map (kbd "C-o") (jmp-center evil-jump-backward))
+(define-key evil-motion-state-map (kbd "TAB") (jmp-center evil-jump-forward))
+(define-key evil-motion-state-map "n" (jmp-center evil-search-next))
+(define-key evil-motion-state-map "N" (jmp-center evil-search-previous))
 
 ;;; Evil Numbers
-(bindall define-key (N V)
-         ((kbd "C-a") 'evil-numbers/inc-at-pt)
-         ((kbd "C-s") 'evil-numbers/dec-at-pt))
+(define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
+(define-key evil-normal-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
+
+;;; Yank Rest Of Line
+(evil-define-operator evil-yank-line-rest (beg end type register)
+  "Saves rest of line into the kill-ring"
+  :motion nil
+  :repeat nil
+  :move-point nil
+  (interactive "<R><x>")
+  (unless (evil-visual-state-p)
+    (setq beg (point))
+    (setq end (point-at-eol)))
+  (evil-yank beg end type register))
+(define-key evil-motion-state-map "Y" 'evil-yank-line-rest)
+(define-key evil-normal-state-map "Y" 'evil-yank-line-rest)
+
+;;; Center Motion
+(evil-define-operator evil-scroll-motion-to-center (beg end type)
+  "Scrolls the motion to the center of the window."
+  :type line
+  :repeat nil
+  :move-point nil
+  :keep-visual t
+  (let* ((top (line-number-at-pos beg))
+         (bot (line-number-at-pos end))
+         (mid (/ (+ top bot) 2)))
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line (1- mid))
+      (recenter))))
+(define-key evil-motion-state-map "zq" 'evil-scroll-motion-to-center)
 
 ;;; Man Quit Kills Buffer
 (define-key Man-mode-map "q" 'Man-kill)
@@ -423,10 +475,29 @@
 (define-key global-map (kbd "C-,") evil-leader--default-map)
 (define-key global-map (kbd "C-;") 'evil-ex)
 (define-key global-map (kbd "C-w") 'evil-window-map)
-(bindall define-key (I) ((kbd "C-w") 'evil-window-map))
+(define-key evil-insert-state-map (kbd "C-w") 'evil-window-map)
 
 ;;; Helm M-x
 (define-key global-map (kbd "M-x") 'helm-M-x)
+
+;;; Term Motions
+(defun term-try-jump-to-point ()
+  (let* ((term-proc (get-buffer-process (current-buffer)))
+         (term-point (marker-position (process-mark term-proc)))
+         (jump-offs (- (point) term-point))
+         (jump-cmd (concat "\e[j:" (int-to-string jump-offs) "x")))
+    (term-send-raw-string jump-cmd)))
+
+(defmacro my-term-evil-do (it)
+  `(lambda () (interactive) (term-try-jump-to-point) (evil-insert-state) ,it))
+
+(evil-define-key 'normal term-raw-map "I" (my-term-evil-do (term-send-home)))
+(evil-define-key 'normal term-raw-map "i" (my-term-evil-do (ignore)))
+(evil-define-key 'normal term-raw-map "A" (my-term-evil-do (term-send-end)))
+(evil-define-key 'normal term-raw-map "a" (my-term-evil-do (term-send-right)))
+(evil-define-key 'normal term-raw-map "P" (my-term-evil-do (term-paste)))
+(evil-define-key 'normal term-raw-map "p"
+  (my-term-evil-do (progn (term-send-right) (term-paste))))
 
 ;;; Newline Auto Comment
 (evil-define-key 'insert prog-mode-map (kbd "RET") 'comment-indent-new-line)
@@ -436,7 +507,8 @@
 (defun fill-current-line ()
   (interactive)
   (fill-region (line-beginning-position) (line-end-position)))
-(bindall define-key (N R I) ((kbd "<C-return>") 'fill-current-line))
+(define-key evil-insert-state-map (kbd "<C-return>") 'fill-current-line)
+(define-key evil-replace-state-map (kbd "<C-return>") 'fill-current-line)
 
 ;;; Better Helm Navigation
 (defun my-helm-navigate ()
@@ -474,7 +546,6 @@
   "g" 'magit-status
   "q" 'update-packages
   "w" 'window-mode/body
-  "i" 'dtrt-indent-adapt
   "u" 'undo-tree-visualize
   "d" 'evil-show-file-info
   "a" 'helm-resume
