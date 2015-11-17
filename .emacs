@@ -1,14 +1,23 @@
 ;;;; TODO List
+
 ;;; helm modeline should be pretty
-;;; find a way to dwim words vs symbols
+;;; - same as regular modeline, except replace (r,c) with (l/max)?
+
 ;;; recursive popwin should behave always
 ;;; evil surround should be repeatable always
+;;; - these might be extremely difficult
+
 ;;; helm resume should work with all helm buffers
 ;;; opening help should not weird out my current buffer
-;;; hitting o or O in a comment should continue the comment block
+;;; - find out how to go about these
 
-;;; evil-space should work the first time I try to use it (?)
-;;; in c/c++/java type modes all curly braces should autopair (?)
+;;; hitting o or O in a comment should continue the comment block
+;;; - will probably need to reimplement comment-indent-newline to be general
+
+;;; find a way to dwim words vs symbols
+;;; - everything that previously worked on words should now work on symbols
+;;; - everything that previously worked on WORDS should now work on words
+;;; - subword-mode should be enabled
 
 ;;;; Packages
 
@@ -22,11 +31,12 @@
       '(monokai-theme
         helm helm-ag helm-projectile
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
-        evil evil-tabs evil-leader evil-numbers evil-commentary evil-space
+        evil evil-tabs evil-leader evil-numbers evil-commentary
         evil-surround evil-quickscope evil-exchange evil-visualstar
-        dtrt-indent multi-term hydra key-chord package-utils popwin
+        dtrt-indent multi-term hydra key-chord package-utils popwin autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
-        highlight-quoted highlight-numbers paren-face fill-column-indicator))
+        highlight-indent-guides highlight-quoted highlight-numbers paren-face
+        fill-column-indicator))
 
 ;;; Package Maintenance
 (defun update-packages ()
@@ -77,8 +87,8 @@
 (require 'evil-exchange)
 (require 'evil-visualstar)
 (require 'evil-commentary)
-(require 'evil-space)
 (require 'evil-magit)
+(require 'autopair)
 (require 'popwin)
 (require 'linum)
 (require 'dtrt-indent)
@@ -121,24 +131,28 @@
 ;;; Mode Specific Changes
 (add-hook 'Man-mode-hook 'evil-motion-state)
 (add-hook 'help-mode-hook 'evil-motion-state)
+(add-hook 'magit-mode-hook 'evil-motion-state)
 (add-hook 'package-menu-mode-hook 'evil-motion-state)
 (add-hook 'messages-buffer-mode-hook 'evil-motion-state)
-(add-hook 'magit-status-mode-hook 'evil-motion-state)
 (evil-set-initial-state #'package-menu-mode 'motion)
 (evil-set-initial-state #'messages-buffer-mode 'motion)
 
 ;;; Set Custom Variables
 (custom-set-variables
- ;; Better Behavior
- '(scroll-conservatively 101)
- '(vc-follow-symlinks t)
- '(require-final-newline t)
- '(inhibit-startup-screen t)
- '(mouse-avoidance-mode 'banish)
+ ;; Better Motion
+ '(scroll-conservatively 5)
  '(make-pointer-invisible nil)
+ '(mouse-avoidance-mode 'banish)
+ ;; Better Start And Exit
+ '(inhibit-startup-screen t)
+ '(require-final-newline t)
+ ;; Better Editing
  '(evil-want-fine-undo 'no)
- '(magit-push-always-verify nil)
  '(sentence-end-double-space nil)
+ ;; Better VC Behavior
+ '(vc-follow-symlinks t)
+ '(magit-push-always-verify nil)
+ ;; Better Term Behavior
  '(multi-term-program "/bin/zsh")
  '(multi-term-switch-after-close nil)
  '(Man-notify-method 'pushy)
@@ -147,6 +161,7 @@
  '(column-number-mode t)
  '(elscreen-display-tab nil)
  '(whitespace-style '(face lines-tail trailing tab-mark))
+ '(autopair-blink nil)
  ;; Indentation
  '(indent-tabs-mode nil)
  '(dtrt-indent-max-merge-deviation 0.01)
@@ -232,7 +247,7 @@
   (unless (or (not filename) (file-writable-p filename))
     (setq filename (concat "/sudo::" (expand-file-name filename)))))
 
-;;; Remove Dot Files From Helm Find File
+;;; Remove . And .. From Helm Find File
 (defadvice helm-ff-filter-candidate-one-by-one
     (around helm-hide-dot-files (file) activate)
   (unless (string-match-p "/\\.\\.?$" file) ad-do-it))
@@ -255,7 +270,6 @@
 
 ;;; Other Helpful Modes
 (popwin-mode 1)
-(evil-space-mode 1)
 (evil-commentary-mode 1)
 (global-evil-surround-mode 1)
 (global-evil-visualstar-mode 1)
@@ -270,14 +284,17 @@
 (add-hook 'text-mode-hook 'linum-mode)
 (add-hook 'prog-mode-hook 'hl-line-mode)
 (add-hook 'text-mode-hook 'hl-line-mode)
+(add-hook 'prog-mode-hook 'autopair-mode)
+(add-hook 'text-mode-hook 'autopair-mode)
 (add-hook 'prog-mode-hook 'whitespace-mode)
 (add-hook 'text-mode-hook 'whitespace-mode)
-(add-hook 'prog-mode-hook 'electric-pair-mode)
-(add-hook 'text-mode-hook 'electric-pair-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
 (add-hook 'prog-mode-hook 'highlight-indent-guides-mode)
 (add-hook 'text-mode-hook 'highlight-indent-guides-mode)
+
+;;; Disable Quickscope For Magit
+(add-hook 'magit-mode-hook 'turn-off-evil-quickscope-mode)
 
 ;;; Load Theme
 (load-theme 'monokai t)
@@ -412,20 +429,16 @@
 ;;; Bind Semicolon To Evil Ex
 (define-key evil-motion-state-map ";" 'evil-ex)
 
+;;; Bind Space To Repeat Find
+(define-key evil-motion-state-map (kbd "SPC") 'evil-repeat-find-char)
+(define-key evil-motion-state-map (kbd "S-SPC") 'evil-repeat-find-char-reverse)
+
 ;;; Window Jumps Column Zero
 (defmacro jmp-zero (jmp)
   `(lambda () (interactive) (,jmp) (evil-beginning-of-line)))
 (define-key evil-motion-state-map "H" (jmp-zero evil-window-top))
 (define-key evil-motion-state-map "M" (jmp-zero evil-window-middle))
 (define-key evil-motion-state-map "L" (jmp-zero evil-window-bottom))
-
-;;; Window Centers On Long Jump
-(defmacro jmp-center (jmp)
-  `(lambda () (interactive) (,jmp) (evil-scroll-line-to-center nil)))
-(define-key evil-motion-state-map (kbd "C-o") (jmp-center evil-jump-backward))
-(define-key evil-motion-state-map (kbd "TAB") (jmp-center evil-jump-forward))
-(define-key evil-motion-state-map "n" (jmp-center evil-search-next))
-(define-key evil-motion-state-map "N" (jmp-center evil-search-previous))
 
 ;;; Evil Numbers
 (define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
