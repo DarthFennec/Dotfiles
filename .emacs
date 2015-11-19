@@ -1,15 +1,11 @@
 ;;;; TODO List
 
-;;; helm modeline should be pretty
-;;; - same as regular modeline, except replace (r,c) with (l/max)?
-
 ;;; recursive popwin should behave always
 ;;; evil surround should be repeatable always
 ;;; - these might be extremely difficult
 
-;;; helm resume should work with all helm buffers
 ;;; opening help should not weird out my current buffer
-;;; - find out how to go about these
+;;; - find out how to go about this
 
 ;;; hitting o or O in a comment should continue the comment block
 ;;; - will probably need to reimplement comment-indent-newline to be general
@@ -117,6 +113,12 @@
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
         "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
+
+;;; Helm Resumable Buffers
+(setq my-helm-resumable-buffers
+      '("*helm*" "*helm select xfont*" "*helm projectile*" "*Helm Find Files*"
+        "*helm-ag*" "*helm M-x*" "*helm apt*" "*helm top*" "*helm eval*"
+        "*helm calcul*" "*helm colors*" "*helm process*" "*helm buffers*"))
 
 ;;; Autosaves And Backups
 (defvar autosave-dir (expand-file-name "~/.emacs.d/autosave/"))
@@ -252,6 +254,13 @@
     (around helm-hide-dot-files (file) activate)
   (unless (string-match-p "/\\.\\.?$" file) ad-do-it))
 
+;;; Control Which Helm Buffers Can Be Resumed
+(defadvice helm-initialize (before helm-control-resume activate)
+  (if (or (string-match-p "^\\*helm-mode-.+\\*$" (helm-buffer-get))
+          (member (helm-buffer-get) my-helm-resumable-buffers))
+      (when (eq any-resume 'noresume) (setq any-resume nil))
+    (setq any-resume 'noresume)))
+
 ;;; Disable GUI
 (tool-bar-mode -1)
 (menu-bar-mode -1)
@@ -292,6 +301,15 @@
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
 (add-hook 'prog-mode-hook 'highlight-indent-guides-mode)
 (add-hook 'text-mode-hook 'highlight-indent-guides-mode)
+
+;;; Custom Highlights
+(defun custom-highlights ()
+  (font-lock-add-keywords
+   nil
+   '(("\\bFIXME\\b\\|\\bTODO\\b" 0 'match t)
+     ("[[:nonascii:]]" 0 'whitespace-space-before-tab t))))
+(add-hook 'prog-mode-hook 'custom-highlights)
+(add-hook 'text-mode-hook 'custom-highlights)
 
 ;;; Disable Quickscope For Magit
 (add-hook 'magit-mode-hook 'turn-off-evil-quickscope-mode)
@@ -359,7 +377,11 @@
 
 (defun get-modeline-right ()
   (let ((perc (format-mode-line "%p"))
-        (size (format-mode-line " (%l,%c) ")))
+        (size (if (string-match-p "^\\*helm[- ].+\\*$" (buffer-name))
+                  (concat
+                   " (" (int-to-string (helm-candidate-number-at-point))
+                   "/" (int-to-string (helm-get-candidate-number t)) ") ")
+                (format-mode-line " (%l,%c) "))))
     (when (string= perc "Bottom") (setq perc "Bot"))
     (when (string-match-p "[0-9]+%$" perc) (setq perc (concat perc "%")))
     (concat size perc " " elscreen-mode-line-string " ")))
@@ -381,6 +403,12 @@
  mode-line-format
  '((:eval (draw-modeline (get-modeline-left) (get-modeline-right)))))
 
+;;; Helm Should Use New Modeline
+(setq helm-mode-line-string nil)
+(defadvice helm-display-mode-line (before helm-display-my-modeline activate)
+  (when (listp source) (assq-delete-all 'mode-line source)))
+
+;;; Message Buffer Should Use New Modeline
 (kill-buffer "*Messages*")
 
 ;;;; Keybindings
