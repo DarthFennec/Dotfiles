@@ -1,11 +1,16 @@
 ;;;; TODO List
 
-;;; recursive popwin should behave always
-;;; evil surround should be repeatable always
-;;; - these might be extremely difficult
+;;; do lazy package loading wherever possible
 
-;;; opening help should not weird out my current buffer
-;;; - find out how to go about this
+;;; current line highlight should be darker
+
+;;; evil surround should be repeatable always
+
+;;; popwin problems:
+;;; - cannot seem to control what happens to popwin window when switching from
+;;;   it; handler does not run
+;;; - cannot open multiple or recursive popwins without some of them becoming
+;;;   unbound, it seems that not all of them are tracked properly
 
 ;;; hitting o or O in a comment should continue the comment block
 ;;; - will probably need to reimplement comment-indent-newline to be general
@@ -27,8 +32,8 @@
       '(monokai-theme
         helm helm-ag helm-projectile
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
-        evil evil-tabs evil-leader evil-numbers evil-commentary
-        evil-surround evil-quickscope evil-exchange evil-visualstar
+        evil evil-tabs evil-leader evil-numbers evil-commentary evil-indent-plus
+        evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term hydra key-chord package-utils popwin autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
@@ -81,8 +86,10 @@
 (require 'evil-quickscope)
 (require 'evil-surround)
 (require 'evil-exchange)
+(require 'evil-indent-plus)
 (require 'evil-visualstar)
 (require 'evil-commentary)
+(require 'evil-matchit)
 (require 'evil-magit)
 (require 'autopair)
 (require 'popwin)
@@ -126,6 +133,7 @@
 
 ;;; Language Specific Changes
 (add-hook 'haskell-mode-hook 'haskell-indentation-mode)
+(add-hook 'json-mode-hook 'highlight-numbers--turn-off)
 (add-to-list 'auto-mode-alist '("README\\.md$" . gfm-mode))
 (add-to-list 'dtrt-indent-hook-mapping-list
              '(groovy-mode c/c++/java c-basic-offset))
@@ -172,6 +180,7 @@
  '(fill-column 80)
  '(whitespace-line-column nil)
  '(fci-handle-truncate-lines nil)
+ '(truncate-partial-width-windows 90)
  ;; Autosaves And Backups
  '(auto-save-list-file-prefix autosave-dir)
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
@@ -181,21 +190,16 @@
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
  ;; Popwin
+ '(same-window-buffer-names '("*Help*"))
  '(popwin:special-display-config
-   '((help-mode)
-     (debugger-mode)
-     (Buffer-menu-mode)
-     (compilation-mode)
-     (messages-buffer-mode)
-     ("*helm-mode-completion-at-point*" :noselect t)
-     ("*Warnings*")
-     ("*evil-marks*")
-     ("*evil-registers*")
+   '(help-mode debugger-mode Buffer-menu-mode compilation-mode
+     messages-buffer-mode "*Warnings*" "*evil-marks*" "*evil-registers*"
      (" *undo-tree*" :width 60 :position right)
+     ("*helm-mode-completion-at-point*" :noselect t)
      ("^\\*helm[- ].+\\*$" :regexp t)
      (magit-diff-mode :noselect t :width 80 :position right)
      (magit-revision-mode :noselect t :width 80 :position right)
-     (magit-status-mode))))
+     magit-status-mode)))
 
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name disable)
@@ -283,7 +287,9 @@
 (global-evil-surround-mode 1)
 (global-evil-visualstar-mode 1)
 (global-evil-quickscope-mode 1)
+(global-evil-matchit-mode 1)
 (evil-exchange-install)
+(evil-indent-plus-default-bindings)
 
 ;;; Highlighting And Misc
 (global-paren-face-mode 1)
@@ -472,6 +478,23 @@
 (define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
 (define-key evil-normal-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
 
+;;; Evil Open Without Moving Point
+(defun evil-open-below-save-excursion (count)
+  (interactive "p")
+  (save-excursion
+    (evil-open-below count)
+    (evil-normal-state)))
+(define-key evil-normal-state-map "go" 'evil-open-below-save-excursion)
+
+(defun evil-open-above-save-excursion (count)
+  (interactive "p")
+  (let ((col (current-column)))
+    (evil-open-above count)
+    (evil-normal-state)
+    (next-line)
+    (move-to-column col)))
+(define-key evil-normal-state-map "gO" 'evil-open-above-save-excursion)
+
 ;;; Yank Rest Of Line
 (evil-define-operator evil-yank-line-rest (beg end type register)
   "Saves rest of line into the kill-ring"
@@ -503,6 +526,12 @@
 (define-key evil-motion-state-map "zq" 'evil-scroll-motion-to-center)
 
 ;;; Man Quit Kills Buffer
+(defun Info-kill ()
+  (interactive)
+  (if Info-standalone
+      (save-buffers-kill-emacs)
+    (quit-window t)))
+(define-key Info-mode-map "q" 'Info-kill)
 (define-key Man-mode-map "q" 'Man-kill)
 (define-key woman-mode-map "q" 'Man-kill)
 
