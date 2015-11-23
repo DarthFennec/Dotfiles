@@ -46,9 +46,9 @@ cfg h = defaultConfig
 chwm c = c { startupHook = mappend (startupHook c) (setWMName "LG3D") }
 
 scratchpads =
-  [ NS "weechat" (termexec "weechat") m idHook
+  [ NS "rcirc" "emacs -l ~/bin/rcirc" m idHook
   , NS "pulseaudio" "pavucontrol" (className =? "Pavucontrol") idHook ]
-  where m = className =? "Roxterm" <&&> fmap (isInfixOf "WeeChat") title
+  where m = className =? "Emacs" <&&> fmap (== "RCIRC") title
 
 myManageHook = composeAll
   [ fullscreenManageHook
@@ -154,7 +154,7 @@ myKeys c@(XConfig {modMask = m}) = let s = m.|.shiftMask in M.fromList $
   , ((s, xK_BackSpace), recompileXmonad)
   , ((m, xK_BackSpace), spawn "xmonad --restart")
   , ((s, xK_Tab      ), namedScratchpadAction scratchpads "pulseaudio")
-  , ((m, xK_Tab      ), namedScratchpadAction scratchpads "weechat")
+  , ((m, xK_Tab      ), namedScratchpadAction scratchpads "rcirc")
   , ((0, xK_Print    ), runScrot)
   , ((m, xK_x        ), kill)
   , ((m, xK_t        ), withFocused $ windows. W.sink)

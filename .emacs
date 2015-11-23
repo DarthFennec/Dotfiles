@@ -103,6 +103,7 @@
 (require 'man)
 (require 'term)
 (require 'multi-term)
+(require 'rcirc)
 (require 'markdown-mode)
 
 ;;;; Behavior
@@ -119,7 +120,7 @@
         "^\\*Backtrace\\*$" "^\\*Warnings\\*$" "^\\*WoMan-Log\\*$"
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
-        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
+        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$" "^\\*irc\\..+\\*$"))
 
 ;;; Helm Resumable Buffers
 (setq my-helm-resumable-buffers
@@ -144,8 +145,10 @@
 (add-hook 'magit-mode-hook 'evil-motion-state)
 (add-hook 'package-menu-mode-hook 'evil-motion-state)
 (add-hook 'messages-buffer-mode-hook 'evil-motion-state)
+(add-hook 'rcirc-mode-hook 'evil-insert-state)
 (evil-set-initial-state #'package-menu-mode 'motion)
 (evil-set-initial-state #'messages-buffer-mode 'motion)
+(evil-set-initial-state #'rcirc-mode 'insert)
 
 ;;; Set Custom Variables
 (custom-set-variables
@@ -189,6 +192,11 @@
  '(projectile-completion-system 'helm)
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
+ ;; RCIRC
+ '(rcirc-prompt "<%n> ")
+ '(rcirc-nick-completion-format "%s, ")
+ '(browse-url-browser-function 'browse-url-generic)
+ '(browse-url-generic-program "chromium")
  ;; Popwin
  '(same-window-buffer-names '("*Help*"))
  '(popwin:special-display-config
