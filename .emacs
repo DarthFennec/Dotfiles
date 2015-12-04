@@ -2,15 +2,34 @@
 
 ;;; do lazy package loading wherever possible
 
-;;; current line highlight should be darker
+;;; add comment (c) text object
+
+;;; git info in modeline should be better
+
+;;; autopair should not act weird on autoreturn
+
+;;; helm-repeat help should pop up help buffer properly
+
+;;; helm-projectile-ag modeline should show correct row
 
 ;;; evil surround should be repeatable always
+
+;;; add more term motions and make them work better
+;;; - move as much as possible to being handled by zsh
+;;; - add visual selection/range specification capabilities
+;;; - add ignorable paste capabilities
+;;; - add change/delete all forms
+;;; - add r/x/X/s/S
+;;; - add mouse paste
+;;; - \e[::<pt>{,<mk>}{;<ct>:<ps>}<op>
 
 ;;; popwin problems:
 ;;; - cannot seem to control what happens to popwin window when switching from
 ;;;   it; handler does not run
 ;;; - cannot open multiple or recursive popwins without some of them becoming
 ;;;   unbound, it seems that not all of them are tracked properly
+;;; - some modes do not open in popwin at all (ie debugger-mode)
+;;; - sometimes when a popwin buffer opens another buffer disappears temporarily
 
 ;;; hitting o or O in a comment should continue the comment block
 ;;; - will probably need to reimplement comment-indent-newline to be general
@@ -94,6 +113,7 @@
 (require 'autopair)
 (require 'popwin)
 (require 'linum)
+(require 'hl-line)
 (require 'dtrt-indent)
 (require 'highlight-indent-guides)
 (require 'fill-column-indicator)
@@ -134,12 +154,14 @@
 
 ;;; Language Specific Changes
 (add-hook 'haskell-mode-hook 'haskell-indentation-mode)
+(add-hook 'haskell-mode-hook 'highlight-quoted--turn-off)
 (add-hook 'json-mode-hook 'highlight-numbers--turn-off)
+(add-hook 'magit-mode-hook 'turn-off-evil-quickscope-mode)
 (add-to-list 'auto-mode-alist '("README\\.md$" . gfm-mode))
 (add-to-list 'dtrt-indent-hook-mapping-list
              '(groovy-mode c/c++/java c-basic-offset))
 
-;;; Mode Specific Changes
+;;; Set Initial Evil States
 (add-hook 'Man-mode-hook 'evil-motion-state)
 (add-hook 'help-mode-hook 'evil-motion-state)
 (add-hook 'magit-mode-hook 'evil-motion-state)
@@ -200,9 +222,9 @@
  ;; Popwin
  '(same-window-buffer-names '("*Help*"))
  '(popwin:special-display-config
-   '(help-mode debugger-mode Buffer-menu-mode compilation-mode
+   '((" *undo-tree*" :width 60 :position right)
+     help-mode debugger-mode Buffer-menu-mode compilation-mode
      messages-buffer-mode "*Warnings*" "*evil-marks*" "*evil-registers*"
-     (" *undo-tree*" :width 60 :position right)
      ("*helm-mode-completion-at-point*" :noselect t)
      ("^\\*helm[- ].+\\*$" :regexp t)
      (magit-diff-mode :noselect t :width 80 :position right)
@@ -210,20 +232,16 @@
      magit-status-mode)))
 
 ;;; Keep Temporary Buffers Hidden
-(defadvice buffer-name (after boring-buffer-name disable)
-  (when (and ad-return-value
-             (not (eq ?\s (aref ad-return-value 0)))
-             (some (lambda (x) (string-match-p x ad-return-value))
-                   my-boring-buffers))
-    (setq ad-return-value (concat " " ad-return-value))))
+(defadvice buffer-name (after boring-buffer-name activate)
+  (and ad-return-value
+       (boundp 'my-mask-boring-buffer-name-p)
+       (not (eq ?\s (aref ad-return-value 0)))
+       (some (lambda (x) (string-match-p x ad-return-value)) my-boring-buffers)
+       (setq ad-return-value (concat " " ad-return-value))))
 
 (defmacro make-boring-advice (funcname advname)
   `(defadvice ,funcname (around ,advname activate)
-     (ad-enable-advice 'buffer-name 'after 'boring-buffer-name)
-     (ad-activate 'buffer-name)
-     (unwind-protect ad-do-it
-       (ad-disable-advice 'buffer-name 'after 'boring-buffer-name)
-       (ad-activate 'buffer-name))))
+     (let ((my-mask-boring-buffer-name-p t)) ad-do-it)))
 
 (make-boring-advice record-window-buffer record-window-no-boring-buffer)
 (make-boring-advice switch-to-prev-buffer switch-to-prev-no-boring-buffer)
@@ -233,7 +251,7 @@
 (make-boring-advice msb-invisible-buffer-p msb-invisible-boring-buffer-p)
 (make-boring-advice mouse-buffer-menu-alist mouse-no-boring-buffer-menu-alist)
 
-;;; Do Not Kill Scratch
+;;; Do Not Kill Scratch Buffer
 (defun my-save-scratch-buffer ()
   (not (string= (buffer-name (current-buffer)) "*scratch*")))
 (add-hook 'kill-buffer-query-functions 'my-save-scratch-buffer)
@@ -317,22 +335,30 @@
 (add-hook 'text-mode-hook 'highlight-indent-guides-mode)
 
 ;;; Custom Highlights
+(defface custom-highlights-todo-face
+  '((t (:weight bold :foreground "white" :background "black")))
+  "Face to highlight FIXMEs and TODOs.")
+
+(defface custom-highlights-non-ascii-face
+  '((t (:background "#A20C41")))
+  "Face to highlight non-ascii characters.")
+
 (defun custom-highlights ()
   (font-lock-add-keywords
    nil
-   '(("\\bFIXME\\b\\|\\bTODO\\b" 0 'match t)
-     ("[[:nonascii:]]" 0 'whitespace-space-before-tab t))))
+   '(("\\bFIXME\\b\\|\\bTODO\\b" 0 'custom-highlights-todo-face t)
+     ("[[:nonascii:]]" 0 'custom-highlights-non-ascii-face t))))
 (add-hook 'prog-mode-hook 'custom-highlights)
 (add-hook 'text-mode-hook 'custom-highlights)
-
-;;; Disable Quickscope For Magit
-(add-hook 'magit-mode-hook 'turn-off-evil-quickscope-mode)
 
 ;;; Load Theme
 (load-theme 'monokai t)
 
 ;;; Face Customizations
 (set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
+(set-face-attribute 'helm-selection nil
+                    :background "#39382E" :underline 'unspecified)
+(set-face-attribute 'hl-line nil :background "#39382E")
 (dotimes (i 6)
   (set-face-attribute
    (intern (concat "markdown-header-face-" (number-to-string (1+ i))))
@@ -476,32 +502,54 @@
 (define-key evil-motion-state-map (kbd "S-SPC") 'evil-repeat-find-char-reverse)
 
 ;;; Window Jumps Column Zero
-(defmacro jmp-zero (jmp)
-  `(lambda () (interactive) (,jmp) (evil-beginning-of-line)))
-(define-key evil-motion-state-map "H" (jmp-zero evil-window-top))
-(define-key evil-motion-state-map "M" (jmp-zero evil-window-middle))
-(define-key evil-motion-state-map "L" (jmp-zero evil-window-bottom))
+(evil-define-motion evil-window-top-and-zero (count)
+  "Move the cursor to line COUNT from the top of the window on column zero."
+  :jump t
+  :type line
+  (move-to-window-line
+   (max (or count 0) (if (= (point-min) (window-start)) 0 scroll-margin))))
+(define-key evil-motion-state-map "H" 'evil-window-top-and-zero)
+
+(evil-define-motion evil-window-middle-and-zero ()
+  "Move the cursor to the middle line in the window on column zero."
+  :jump t
+  :type line
+  (move-to-window-line
+   (/ (1+ (save-excursion (move-to-window-line -1))) 2)))
+(define-key evil-motion-state-map "M" 'evil-window-middle-and-zero)
+
+(evil-define-motion evil-window-bottom-and-zero (count)
+  "Move the cursor to line COUNT from the bottom of the window on column zero."
+  :jump t
+  :type line
+  (move-to-window-line (- (max (or count 1) (1+ scroll-margin)))))
+(define-key evil-motion-state-map "L" 'evil-window-bottom-and-zero)
 
 ;;; Evil Numbers
 (define-key evil-normal-state-map (kbd "C-a") 'evil-numbers/inc-at-pt)
 (define-key evil-normal-state-map (kbd "C-s") 'evil-numbers/dec-at-pt)
 
-;;; Evil Open Without Moving Point
-(defun evil-open-below-save-excursion (count)
+;;; Evil Open With Extra Line
+(defun evil-open-below-with-extra-line (count)
   (interactive "p")
-  (save-excursion
-    (evil-open-below count)
-    (evil-normal-state)))
-(define-key evil-normal-state-map "go" 'evil-open-below-save-excursion)
+  (evil-insert-newline-below)
+  (previous-line)
+  (evil-open-below count))
+(define-key evil-normal-state-map "go" 'evil-open-below-with-extra-line)
 
-(defun evil-open-above-save-excursion (count)
+(defun evil-open-above-with-extra-line (count)
   (interactive "p")
-  (let ((col (current-column)))
-    (evil-open-above count)
-    (evil-normal-state)
-    (next-line)
-    (move-to-column col)))
-(define-key evil-normal-state-map "gO" 'evil-open-above-save-excursion)
+  (evil-insert-newline-above)
+  (next-line)
+  (evil-open-above count))
+(define-key evil-normal-state-map "gO" 'evil-open-above-with-extra-line)
+
+;;; Evil Global Textobject
+(evil-define-text-object evil-global (&optional count beg end type)
+  "A text object representing the entire buffer"
+  (list (point-min) (point-max)))
+(define-key evil-outer-text-objects-map "g" 'evil-global)
+(define-key evil-inner-text-objects-map "g" 'evil-global)
 
 ;;; Yank Rest Of Line
 (evil-define-operator evil-yank-line-rest (beg end type register)
