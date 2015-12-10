@@ -4,13 +4,13 @@
 
 ;;; add comment (c) text object
 
-;;; git info in modeline should be better
-
 ;;; autopair should not act weird on autoreturn
 
-;;; helm-repeat help should pop up help buffer properly
-
 ;;; helm-projectile-ag modeline should show correct row
+
+;;; modeline should show ~ when I'm in my home directory
+
+;;; helm-find-files should be able to C-l out of empty directories
 
 ;;; evil surround should be repeatable always
 
@@ -24,12 +24,14 @@
 ;;; - \e[::<pt>{,<mk>}{;<ct>:<ps>}<op>
 
 ;;; popwin problems:
+;;; TO FIX: use display-buffer-in-side-window instead
 ;;; - cannot seem to control what happens to popwin window when switching from
 ;;;   it; handler does not run
 ;;; - cannot open multiple or recursive popwins without some of them becoming
 ;;;   unbound, it seems that not all of them are tracked properly
 ;;; - some modes do not open in popwin at all (ie debugger-mode)
 ;;; - sometimes when a popwin buffer opens another buffer disappears temporarily
+;;; - helm-repeat help does not pop up help buffer properly
 
 ;;; hitting o or O in a comment should continue the comment block
 ;;; - will probably need to reimplement comment-indent-newline to be general
@@ -140,6 +142,7 @@
         "^\\*Backtrace\\*$" "^\\*Warnings\\*$" "^\\*WoMan-Log\\*$"
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
+        "^\\*Shell Command Output\\*$"
         "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$" "^\\*irc\\..+\\*$"))
 
 ;;; Helm Resumable Buffers
@@ -374,9 +377,22 @@
 (add-function :before pre-redisplay-function #'set-my-mode-line-selected-window)
 
 ;;; Draw The Modeline
+(defvar-local my-vc-data '(nil . nil))
 (defvar-local my-indent-offset '(nil . nil))
 
 (defun get-modeline-left ()
+  (unless (or (string= default-directory (car my-vc-data))
+              (and (projectile-project-p)
+                   (string= (projectile-project-root) (car my-vc-data))))
+    (let ((path default-directory) dir vctype vctype1)
+      (if (not (projectile-project-p))
+          (setq dir (file-name-base (directory-file-name default-directory)))
+        (setq path (projectile-project-root)
+              dir (projectile-project-name)
+              vctype1 (projectile-project-vcs))
+        (unless (eq 'none vctype1)
+          (setq vctype (concat ":" (symbol-name vctype1)))))
+      (setq my-vc-data (cons path (concat "[" dir vctype "]")))))
   (unless (eq major-mode (car my-indent-offset))
     (let ((offset (caddr (dtrt-indent--search-hook-mapping major-mode))))
       (setq my-indent-offset (cons major-mode offset))))
@@ -404,15 +420,13 @@
          (eol (case (coding-system-eol-type buffer-file-coding-system)
                 (0 "LF") (1 "CRLF") (2 "CR")))
          (encode (concat "[" coding ":" eol "]"))
-         (dir (if (projectile-project-p) (projectile-project-name)
-                (file-name-base (directory-file-name default-directory))))
-         (proj (concat "[" dir vc-mode "]"))
+         (proj (if (or buffer-file-name (eq major-mode 'term-mode))
+                   (cdr my-vc-data) ""))
          (emph '(face mode-line-emphasis)))
     (add-text-properties 0 (- (length buf) 2) '(face mode-line-buffer-id) buf)
     (add-text-properties (- (length buf) 2) (length buf) emph buf)
     (add-text-properties 0 (length state) emph state)
     (add-text-properties 0 (length mmode) emph mmode)
-    (set-text-properties 0 (length proj) nil proj)
     (list state buf rosu mmode indent encode proj)))
 
 (defun get-modeline-right ()
@@ -644,6 +658,7 @@
     (helm-maybe-exit-minibuffer)))
 (define-key helm-find-files-map (kbd "RET") 'my-helm-navigate)
 (define-key helm-find-files-map (kbd "<C-return>") 'my-helm-navigate)
+(define-key helm-find-files-map (kbd "<S-return>") 'helm-maybe-exit-minibuffer)
 
 ;;; Projectile Switch Project Map
 (defmacro bind-switch-key (key act)
