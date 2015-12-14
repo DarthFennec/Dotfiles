@@ -6,6 +6,12 @@
 
 ;;; autopair should not act weird on autoreturn
 
+;;; helm-repeat help should pop up help buffer properly
+
+;;; debugger-mode should use side window properly
+
+;;; possibly disallow window switching from side windows
+
 ;;; helm-projectile-ag modeline should show correct row
 
 ;;; modeline should show ~ when I'm in my home directory
@@ -22,16 +28,6 @@
 ;;; - add r/x/X/s/S
 ;;; - add mouse paste
 ;;; - \e[::<pt>{,<mk>}{;<ct>:<ps>}<op>
-
-;;; popwin problems:
-;;; TO FIX: use display-buffer-in-side-window instead
-;;; - cannot seem to control what happens to popwin window when switching from
-;;;   it; handler does not run
-;;; - cannot open multiple or recursive popwins without some of them becoming
-;;;   unbound, it seems that not all of them are tracked properly
-;;; - some modes do not open in popwin at all (ie debugger-mode)
-;;; - sometimes when a popwin buffer opens another buffer disappears temporarily
-;;; - helm-repeat help does not pop up help buffer properly
 
 ;;; hitting o or O in a comment should continue the comment block
 ;;; - will probably need to reimplement comment-indent-newline to be general
@@ -55,7 +51,7 @@
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
         evil evil-tabs evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
-        dtrt-indent multi-term hydra key-chord package-utils popwin autopair
+        dtrt-indent multi-term hydra key-chord package-utils autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
         fill-column-indicator))
@@ -113,7 +109,6 @@
 (require 'evil-matchit)
 (require 'evil-magit)
 (require 'autopair)
-(require 'popwin)
 (require 'linum)
 (require 'hl-line)
 (require 'dtrt-indent)
@@ -144,6 +139,17 @@
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
         "^\\*Shell Command Output\\*$"
         "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$" "^\\*irc\\..+\\*$"))
+
+;;; Side Window Buffers
+(setq my-side-window-buffers
+      '((" *undo-tree*" :width 60 :position right)
+        help-mode Buffer-menu-mode compilation-mode messages-buffer-mode
+        "*Warnings*" "*evil-marks*" "*evil-registers*"
+        ("*helm-mode-completion-at-point*" :noselect t)
+        ("^\\*helm[- ].+\\*$" :regexp t)
+        (magit-diff-mode :noselect t :position right)
+        (magit-revision-mode :noselect t :position right)
+        magit-status-mode))
 
 ;;; Helm Resumable Buffers
 (setq my-helm-resumable-buffers
@@ -187,6 +193,8 @@
  ;; Better Editing
  '(evil-want-fine-undo 'no)
  '(sentence-end-double-space nil)
+ ;; Better Window Behavior
+ '(same-window-regexps '("."))
  ;; Better VC Behavior
  '(vc-follow-symlinks t)
  '(magit-push-always-verify nil)
@@ -221,18 +229,7 @@
  '(rcirc-prompt "<%n> ")
  '(rcirc-nick-completion-format "%s, ")
  '(browse-url-browser-function 'browse-url-generic)
- '(browse-url-generic-program "chromium")
- ;; Popwin
- '(same-window-buffer-names '("*Help*"))
- '(popwin:special-display-config
-   '((" *undo-tree*" :width 60 :position right)
-     help-mode debugger-mode Buffer-menu-mode compilation-mode
-     messages-buffer-mode "*Warnings*" "*evil-marks*" "*evil-registers*"
-     ("*helm-mode-completion-at-point*" :noselect t)
-     ("^\\*helm[- ].+\\*$" :regexp t)
-     (magit-diff-mode :noselect t :width 80 :position right)
-     (magit-revision-mode :noselect t :width 80 :position right)
-     magit-status-mode)))
+ '(browse-url-generic-program "chromium"))
 
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name activate)
@@ -253,6 +250,64 @@
 (make-boring-advice menu-bar-update-buffers menu-bar-update-no-boring-buffers)
 (make-boring-advice msb-invisible-buffer-p msb-invisible-boring-buffer-p)
 (make-boring-advice mouse-buffer-menu-alist mouse-no-boring-buffer-menu-alist)
+
+;;; Configure Side Windows
+(defun my-display-maybe-close-window (&optional selected-only window)
+  (interactive)
+  (when (null window)
+    (setq window (if (window-minibuffer-p) (minibuffer-selected-window)
+                   (selected-window))))
+  (let ((parent window))
+    (while (and parent (not (window-parameter parent 'window-side)))
+      (setq parent (window-parent parent)))
+    (unless (and selected-only (eq window (frame-selected-window window)))
+      (if (null parent) (keyboard-quit)
+        (delete-side-window window))
+      t)))
+
+(defun my-display-get-config (buffer)
+  (let ((bufname (if (bufferp buffer) (buffer-name buffer) buffer)))
+    (-first (lambda (ent)
+              (let ((regexp (and (consp ent) (plist-get (cdr ent) :regexp)))
+                    (ident (if (consp ent) (car ent) ent)))
+                (cond ((stringp ident)
+                       (if regexp (string-match-p ident bufname)
+                         (string= ident bufname)))
+                      ((symbolp ident)
+                       (let ((buf (get-buffer buffer)))
+                         (eq ident (buffer-local-value 'major-mode buf))))
+                      ((functionp ident) (funcall ident buffer)))))
+            my-side-window-buffers)))
+
+(defun my-display-condition (buffer action)
+  (and (my-display-get-config buffer) t))
+
+(defun my-display-action (buffer alist)
+  (let ((ent (my-display-get-config buffer)) props alist window)
+    (when ent
+      (when (consp ent) (setq props (cdr ent)))
+      (setq alist `((side . ,(or (plist-get props :position) 'bottom))
+                    (window-width . ,(or (plist-get props :width) 80))
+                    (window-height . ,(or (plist-get props :height) 15))))
+      (setq window (display-buffer-in-side-window (get-buffer buffer) alist))
+      (unless (plist-get props :noselect) (select-window window)))
+    window))
+
+(add-to-list 'display-buffer-alist '(my-display-condition my-display-action))
+
+;; magit popup compatibility
+(defadvice magit-popup-mode-display-buffer
+    (around my-magit-popup-display-buffer-same-window activate)
+  (let ((winconf (current-window-configuration)))
+    (switch-to-buffer buffer)
+    (funcall mode)
+    (setq magit-popup-previous-winconf winconf)))
+
+;; help compatibility
+(defadvice push-button (around my-push-button-maybe-close-help activate)
+  (let ((my-current-window (selected-window)))
+    ad-do-it
+    (my-display-maybe-close-window t my-current-window)))
 
 ;;; Do Not Kill Scratch Buffer
 (defun my-save-scratch-buffer ()
@@ -311,7 +366,6 @@
 (global-evil-tabs-mode 1)
 
 ;;; Other Helpful Modes
-(popwin-mode 1)
 (evil-commentary-mode 1)
 (global-evil-surround-mode 1)
 (global-evil-visualstar-mode 1)
@@ -507,6 +561,9 @@
 (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
 (define-key evil-visual-state-map (kbd "C-g") 'evil-normal-state)
 (define-key evil-replace-state-map (kbd "C-g") 'evil-normal-state)
+
+;;; C-g Closes All Side Windows
+(define-key global-map (kbd "C-g") 'my-display-maybe-close-window)
 
 ;;; Bind Semicolon To Evil Ex
 (define-key evil-motion-state-map ";" 'evil-ex)
