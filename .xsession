@@ -9,6 +9,7 @@ xrdb ~/.Xresources
 xsetroot -cursor_name left_ptr
 pulseaudio --start --log-target=syslog
 mpd
+xbanish &
 pavucontrol &
 conky | xmoconk &
 trayer --edge top --align right --margin 0 --padding 0 --width 100 \

@@ -186,7 +186,6 @@
  ;; Better Motion
  '(scroll-conservatively 5)
  '(make-pointer-invisible nil)
- '(mouse-avoidance-mode 'banish)
  ;; Better Start And Exit
  '(inhibit-startup-screen t)
  '(require-final-newline t)
