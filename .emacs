@@ -2,40 +2,21 @@
 
 ;;; do lazy package loading wherever possible
 
-;;; add comment (c) text object
+;;; add support for more vim keys in term-mode
 
-;;; autopair should not act weird on autoreturn
+;;; helm-repeat should not close existing window sometimes
 
 ;;; helm-repeat help should pop up help buffer properly
 
-;;; debugger-mode should use side window properly
+;;; possibly disallow window switching from side windows or close on switch
 
-;;; possibly disallow window switching from side windows
+;;; possibly implement side window layering
+
+;;; possibly implement window-local buffer lists
 
 ;;; helm-projectile-ag modeline should show correct row
 
-;;; modeline should show ~ when I'm in my home directory
-
-;;; helm-find-files should be able to C-l out of empty directories
-
 ;;; evil surround should be repeatable always
-
-;;; add more term motions and make them work better
-;;; - move as much as possible to being handled by zsh
-;;; - add visual selection/range specification capabilities
-;;; - add ignorable paste capabilities
-;;; - add change/delete all forms
-;;; - add r/x/X/s/S
-;;; - add mouse paste
-;;; - \e[::<pt>{,<mk>}{;<ct>:<ps>}<op>
-
-;;; hitting o or O in a comment should continue the comment block
-;;; - will probably need to reimplement comment-indent-newline to be general
-
-;;; find a way to dwim words vs symbols
-;;; - everything that previously worked on words should now work on symbols
-;;; - everything that previously worked on WORDS should now work on words
-;;; - subword-mode should be enabled
 
 ;;;; Packages
 
@@ -144,10 +125,11 @@
 (setq my-side-window-buffers
       '((" *undo-tree*" :width 60 :position right)
         help-mode Buffer-menu-mode compilation-mode messages-buffer-mode
-        "*Warnings*" "*evil-marks*" "*evil-registers*"
+        "*Warnings*" "*evil-marks*" "*evil-registers*" "*Backtrace*"
         ("*helm-mode-completion-at-point*" :noselect t)
         ("^\\*helm[- ].+\\*$" :regexp t)
         (magit-diff-mode :noselect t :position right)
+        (magit-process-mode :noselect t :position right)
         (magit-revision-mode :noselect t :position right)
         magit-status-mode))
 
@@ -189,6 +171,8 @@
  ;; Better Start And Exit
  '(inhibit-startup-screen t)
  '(require-final-newline t)
+ ;; Better Debugging
+ '(debug-on-error t)
  ;; Better Editing
  '(evil-want-fine-undo 'no)
  '(sentence-end-double-space nil)
@@ -259,10 +243,11 @@
   (let ((parent window))
     (while (and parent (not (window-parameter parent 'window-side)))
       (setq parent (window-parent parent)))
-    (unless (and selected-only (eq window (frame-selected-window window)))
+    (if selected-only
+        (unless (or (null parent) (eq window (frame-selected-window window)))
+          (delete-side-window window))
       (if (null parent) (keyboard-quit)
-        (delete-side-window window))
-      t)))
+        (delete-side-window window)))))
 
 (defun my-display-get-config (buffer)
   (let ((bufname (if (bufferp buffer) (buffer-name buffer) buffer)))
@@ -337,9 +322,11 @@
     (setq filename (concat "/sudo::" (expand-file-name filename)))))
 
 ;;; Remove . And .. From Helm Find File
-(defadvice helm-ff-filter-candidate-one-by-one
-    (around helm-hide-dot-files (file) activate)
-  (unless (string-match-p "/\\.\\.?$" file) ad-do-it))
+(defadvice helm-ff-directory-files
+    (after my-helm-ff-directory-files-hide-dots activate)
+  (setq ad-return-value
+        (or (cddr ad-return-value)
+            (list (car ad-return-value)))))
 
 ;;; Control Which Helm Buffers Can Be Resumed
 (defadvice helm-initialize (before helm-control-resume activate)
@@ -347,6 +334,25 @@
           (member (helm-buffer-get) my-helm-resumable-buffers))
       (when (eq any-resume 'noresume) (setq any-resume nil))
     (setq any-resume 'noresume)))
+
+;;; Switch Word And Symbol Handling
+(defadvice forward-thing (before my-forward-thing activate)
+  (when (eq thing 'evil-word) (setq thing 'evil-symbol))
+  (when (eq thing 'evil-WORD) (setq thing 'evil-word)))
+
+;;; Subword Mode In Evil
+(define-category ?U "Uppercase")
+(define-category ?u "Lowercase")
+(modify-category-entry (cons ?A ?Z) ?U)
+(modify-category-entry (cons ?a ?z) ?u)
+(make-variable-buffer-local 'evil-cjk-word-separating-categories)
+(add-hook
+ 'subword-mode-hook
+ (lambda ()
+   (if subword-mode
+       (push '(?u . ?U) evil-cjk-word-separating-categories)
+     (setq evil-cjk-word-separating-categories
+           (default-value 'evil-cjk-word-separating-categories)))))
 
 ;;; Disable GUI
 (tool-bar-mode -1)
@@ -370,6 +376,7 @@
 (global-evil-visualstar-mode 1)
 (global-evil-quickscope-mode 1)
 (global-evil-matchit-mode 1)
+(global-subword-mode 1)
 (evil-exchange-install)
 (evil-indent-plus-default-bindings)
 
@@ -430,6 +437,7 @@
 (add-function :before pre-redisplay-function #'set-my-mode-line-selected-window)
 
 ;;; Draw The Modeline
+(defconst my-home-dir (expand-file-name "~/"))
 (defvar-local my-vc-data '(nil . nil))
 (defvar-local my-indent-offset '(nil . nil))
 
@@ -439,7 +447,8 @@
                    (string= (projectile-project-root) (car my-vc-data))))
     (let ((path default-directory) dir vctype vctype1)
       (if (not (projectile-project-p))
-          (setq dir (file-name-base (directory-file-name default-directory)))
+          (setq dir (if (string= default-directory my-home-dir) "~"
+                      (file-name-base (directory-file-name default-directory))))
         (setq path (projectile-project-root)
               dir (projectile-project-name)
               vctype1 (projectile-project-vcs))
@@ -677,32 +686,114 @@
 (define-key global-map (kbd "M-x") 'helm-M-x)
 
 ;;; Term Motions
-(defun term-try-jump-to-point ()
+(defun my-term-motion (motn &optional pt mk ct st yt ps)
+  (delete-trailing-whitespace)
   (let* ((term-proc (get-buffer-process (current-buffer)))
          (term-point (marker-position (process-mark term-proc)))
-         (jump-offs (- (point) term-point))
-         (jump-cmd (concat "\e[j:" (int-to-string jump-offs) "x")))
-    (term-send-raw-string jump-cmd)))
+         (ptn (if (eq pt t) (point) pt)) (mkn (if (eq mk t) (mark) mk))
+         (pto (int-to-string (- ptn term-point)))
+         (mko (when mk (concat "," (int-to-string (- mkn term-point)))))
+         (cnt (when ct (concat "#" (int-to-string ct))))
+         (psd (when (and ps (> (length ps) 0)) ps))
+         (psl (when psd (concat ";" (int-to-string (length psd)))))
+         (stp (or st "c")) (ytp (or yt "c"))
+         (motn-cmd (concat "\e[::" pto mko cnt psl ":" motn stp ytp psd)))
+    (term-send-raw-string motn-cmd)))
 
-(defmacro my-term-evil-do (it)
-  `(lambda () (interactive) (term-try-jump-to-point) (evil-insert-state) ,it))
+(defmacro my-term-motion-do (ins motn &optional pt mk ct st yt ps)
+  `(lambda ()
+     (interactive)
+     (my-term-motion ,motn ,pt ,mk ,ct ,st ,yt ,ps)
+     ,@(when ins '((evil-insert-state)))))
 
-(evil-define-key 'normal term-raw-map "I" (my-term-evil-do (term-send-home)))
-(evil-define-key 'normal term-raw-map "i" (my-term-evil-do (ignore)))
-(evil-define-key 'normal term-raw-map "A" (my-term-evil-do (term-send-end)))
-(evil-define-key 'normal term-raw-map "a" (my-term-evil-do (term-send-right)))
-(evil-define-key 'normal term-raw-map "P" (my-term-evil-do (term-paste)))
-(evil-define-key 'normal term-raw-map "p"
-  (my-term-evil-do (progn (term-send-right) (term-paste))))
+(defmacro my-term-change-delete-build (name motn)
+  `(evil-define-operator ,name
+     (beg end type register yank-handler)
+     "Change or delete text around point, in term-mode."
+     (interactive "<R><x><y>")
+     (my-term-motion ,motn beg end nil (case type (line "l") (block "b")))
+     ,@(when (string= motn "c") '((evil-insert-state)))))
+(my-term-change-delete-build my-term-change "c")
+(my-term-change-delete-build my-term-delete "d")
+
+(defmacro my-term-paste-build (name motn)
+  `(evil-define-command ,name
+     (count &optional register yank-handler)
+     "Pastes the latest yanked text around point, in term-mode."
+     :suppress-operator t
+     (interactive "P<x>")
+     (let* ((text (if register (evil-get-register register) (current-kill 0))))
+       (when text
+         (unless yank-handler
+           (setq yank-handler
+                 (when (stringp text)
+                   (car-safe (get-text-property 0 'yank-handler text)))))
+         (when (vectorp text) (setq text (evil-vector-to-string text)))
+         (setq yank-handler
+               (cond ((eq yank-handler #'evil-yank-line-handler) "l")
+                     ((eq yank-handler #'evil-yank-block-handler) "b")))
+         (my-term-motion ,motn t nil count nil yank-handler text)))))
+(my-term-paste-build my-term-paste-before "P")
+(my-term-paste-build my-term-paste-after "p")
+
+(defun my-term-mouse-paste (click)
+  (interactive "e")
+  (run-hooks 'mouse-leave-buffer-hook)
+  (setq this-command 'yank)
+  (mouse-set-point click)
+  (let ((text
+         (or (if (fboundp 'x-get-selection-value)
+                 (if (eq system-type 'windows-nt)
+                     (or (x-get-selection 'PRIMARY) (x-get-selection-value))
+                   (or (x-get-selection-value) (x-get-selection 'PRIMARY)))
+               (x-get-selection 'PRIMARY))
+             (error "No selection is available"))))
+    (when text (my-term-motion "p" t nil nil nil nil text))))
+
+(evil-define-key 'normal term-raw-map "A" (my-term-motion-do t "A" t))
+(evil-define-key 'normal term-raw-map "a" (my-term-motion-do t "a" t))
+(evil-define-key 'normal term-raw-map "I" (my-term-motion-do t "I" t))
+(evil-define-key 'normal term-raw-map "i" (my-term-motion-do t "i" t))
+(evil-define-key 'normal term-raw-map "c" 'my-term-change)
+(evil-define-key 'normal term-raw-map "d" 'my-term-delete)
+(evil-define-key 'normal term-raw-map "P" 'my-term-paste-before)
+(evil-define-key 'normal term-raw-map "p" 'my-term-paste-after)
+(evil-define-key 'normal term-raw-map [mouse-2] 'my-term-mouse-paste)
+(evil-define-key 'insert term-raw-map [mouse-2] 'my-term-mouse-paste)
 
 ;;; Newline Auto Comment
-(evil-define-key 'insert prog-mode-map (kbd "RET") 'comment-indent-new-line)
-(evil-define-key 'insert text-mode-map (kbd "RET") 'comment-indent-new-line)
+(defadvice newline (around my-comment-newline activate)
+  (if (boundp 'my-recursive-newline) ad-do-it
+    (let ((lst (parent-mode-list major-mode)))
+      (if (or (memq 'prog-mode lst) (memq 'text-mode lst))
+          (let ((my-recursive-newline t)
+                (fill-prefix (fill-context-prefix (point) (point))))
+            (comment-indent-new-line)
+            (indent-according-to-mode))
+        ad-do-it))))
+
+(defmacro my-open-comment-build (name inscmd)
+  `(defun ,name (count)
+     (interactive "p")
+     (let ((prefix (fill-context-prefix (point) (point))))
+       (,inscmd)
+       (setq evil-insert-count count
+             evil-insert-lines t
+             evil-insert-vcount nil)
+       (evil-insert-state 1)
+       (add-hook 'post-command-hook #'evil-maybe-remove-spaces)
+       (when evil-auto-indent
+         (insert prefix)
+         (indent-according-to-mode)))))
+(my-open-comment-build my-evil-open-comment-below evil-insert-newline-below)
+(my-open-comment-build my-evil-open-comment-above evil-insert-newline-above)
+(define-key evil-normal-state-map "o" 'my-evil-open-comment-below)
+(define-key evil-normal-state-map "O" 'my-evil-open-comment-above)
 
 ;;; C-RET Fills Current Line
 (defun fill-current-line ()
   (interactive)
-  (fill-region (line-beginning-position) (line-end-position)))
+  (fill-region (point-at-bol) (point-at-eol)))
 (define-key evil-insert-state-map (kbd "<C-return>") 'fill-current-line)
 (define-key evil-replace-state-map (kbd "<C-return>") 'fill-current-line)
 
