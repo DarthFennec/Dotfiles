@@ -66,6 +66,7 @@ function try-run-command {
             unset VECT
         fi
         if [[ "$ST" == 'l' ]] ; then
+            MK="$((MK-1))"
             while [[ "${BUFFER:$MK:1}" != $'\n' && \
                            "$MK" -ge '0' && "$MK" -lt "$BLEN" ]]
             do MK="$((MK+1))" ; done
