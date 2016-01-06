@@ -117,7 +117,7 @@ fi
 # Miscellaneous
 alias cls="echo -ne '\ec'"
 preexec() { d="$(echo "$3" | sed "s:^~:$HOME:")" ; [ -d $d ] && ls $d }
-export CHROMIUM_USER_FLAGS="--enable-print-preview"
+export CHROMIUM_FLAGS="--enable-print-preview"
 export JAVA_HOME="$(readlink -f /usr/bin/javac | sed "s:bin/javac::")"
 export _JAVA_AWT_WM_NONREPARENTING=1
 export LOGOUT_COMMAND=xlogout
