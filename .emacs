@@ -5,7 +5,8 @@
 ;;; add d/c/s/x yank support in term-mode
 ;;; helm-repeat should not close existing window sometimes
 ;;; helm-repeat help should pop up help buffer properly
-;;; possibly implement side window layering
+;;; add special handling to reshow some side windows (eg help buffer)
+;;; fix issue with completion buffer messing up side buffer tree
 ;;; possibly implement window-local buffer lists
 ;;; helm-projectile-ag modeline should show correct row
 ;;; evil surround should be repeatable always
@@ -26,6 +27,7 @@
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term hydra key-chord package-utils autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
+        scala-mode2
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
         fill-column-indicator))
 
@@ -52,12 +54,19 @@
         (unless (or (package-built-in-p (car dep))
                     (member (car dep) from) (member (car dep) to))
           (setq from (cons (car dep) from)))))
-    (dolist (pack (mapcar #'car package-alist))
+    (dolist (pack (mapcar 'car package-alist))
       (when (and (package-installed-p pack)
                  (not (package-built-in-p pack)) (not (member pack to)))
         (package-utils-remove-by-name pack))))
   ;; clear the minibuffer
   (message nil))
+
+;;; Allow Evil To Set Initial States
+(defadvice evil-set-initial-state
+    (before my-evil-really-set-initial-state activate)
+  (let ((hk (intern (concat (symbol-name mode) "-hook")))
+        (st (intern (concat "evil-" (symbol-name state) "-state"))))
+    (add-hook hk st)))
 
 ;;; Initialize
 (require 'package)
@@ -117,11 +126,11 @@
 (setq my-side-window-buffers
       '((" *undo-tree*" :width 60 :position right)
         help-mode Buffer-menu-mode compilation-mode messages-buffer-mode
-        "*Warnings*" "*evil-marks*" "*evil-registers*" "*Backtrace*"
-        ("*helm-mode-completion-at-point*" :noselect t)
+        "*Warnings*" "*Backtrace*" "*evil-marks*" "*evil-registers*"
+        "*helm-mode-completion-at-point*"
         ("^\\*helm[- ].+\\*$" :regexp t)
+        (magit-process-mode :position right)
         (magit-diff-mode :noselect t :position right)
-        (magit-process-mode :noselect t :position right)
         (magit-revision-mode :noselect t :position right)
         magit-status-mode))
 
@@ -147,19 +156,17 @@
 ;;; Set Initial Evil States
 (add-hook 'Man-mode-hook 'evil-motion-state)
 (add-hook 'help-mode-hook 'evil-motion-state)
-(add-hook 'magit-mode-hook 'evil-motion-state)
-(add-hook 'package-menu-mode-hook 'evil-motion-state)
-(add-hook 'messages-buffer-mode-hook 'evil-motion-state)
-(add-hook 'rcirc-mode-hook 'evil-insert-state)
-(evil-set-initial-state #'package-menu-mode 'motion)
-(evil-set-initial-state #'messages-buffer-mode 'motion)
-(evil-set-initial-state #'rcirc-mode 'insert)
+(evil-set-initial-state 'package-menu-mode 'motion)
+(evil-set-initial-state 'messages-buffer-mode 'motion)
+(evil-set-initial-state 'compilation-mode 'motion)
+(evil-set-initial-state 'rcirc-mode 'insert)
 
 ;;; Set Custom Variables
 (custom-set-variables
  ;; Better Motion
  '(scroll-conservatively 5)
  '(make-pointer-invisible nil)
+ '(magit-display-buffer-noselect t)
  ;; Better Start And Exit
  '(inhibit-startup-screen t)
  '(require-final-newline t)
@@ -225,7 +232,7 @@
 (make-boring-advice mouse-buffer-menu-alist mouse-no-boring-buffer-menu-alist)
 
 ;;; Configure Side Windows
-(defun my-display-maybe-close-window (&optional selected-only window)
+(defun my-display-maybe-close-window (&optional window)
   (interactive)
   (when (null window)
     (setq window (if (window-minibuffer-p) (minibuffer-selected-window)
@@ -233,11 +240,7 @@
   (let ((parent window))
     (while (and parent (not (window-parameter parent 'window-side)))
       (setq parent (window-parent parent)))
-    (if selected-only
-        (unless (or (null parent) (eq window (frame-selected-window window)))
-          (delete-side-window window))
-      (if (null parent) (keyboard-quit)
-        (delete-side-window window)))))
+    (if (null parent) (keyboard-quit) (delete-side-window window))))
 
 (defun my-display-get-config (buffer)
   (let ((bufname (if (bufferp buffer) (buffer-name buffer) buffer)))
@@ -262,21 +265,12 @@
       (when (consp ent) (setq props (cdr ent)))
       (setq alist `((side . ,(or (plist-get props :position) 'bottom))
                     (window-width . ,(or (plist-get props :width) 80))
-                    (window-height . ,(or (plist-get props :height) 15))))
-      (setq window (display-buffer-in-side-window (get-buffer buffer) alist))
-      (unless (plist-get props :noselect) (select-window window)))
+                    (window-height . ,(or (plist-get props :height) 15))
+                    ,@(when (plist-get props :noselect) '((noselect . t)))))
+      (setq window (display-buffer-in-side-window (get-buffer buffer) alist)))
     window))
 
 (add-to-list 'display-buffer-alist '(my-display-condition my-display-action))
-
-(defadvice select-window (around my-select-window-maybe-close activate)
-  (if norecord ad-do-it
-    (let ((my-current-window
-           (if (window-minibuffer-p)
-               (minibuffer-selected-window)
-             (selected-window))))
-      ad-do-it
-      (my-display-maybe-close-window t my-current-window))))
 
 (defadvice magit-popup-mode-display-buffer
     (around my-magit-popup-display-buffer-same-window activate)
@@ -285,6 +279,169 @@
     (funcall mode)
     (setq magit-popup-previous-winconf winconf)))
 
+;;; Track Side Windows
+(defun my-display-find-windows-in-stack (node)
+  (and from (equal from (car node))
+       (or (null fptr)
+           (not (time-less-p (cadddr (cadr node)) (cadddr (cadr fptr)))))
+       (setq fptr node))
+  (and to (equal to (car node))
+       (or (null tptr)
+           (not (time-less-p (cadddr (cadr node)) (cadddr (cadr tptr)))))
+       (setq tptr node))
+  (dolist (n (cddr node)) (my-display-find-windows-in-stack n)))
+
+(defun my-display-prune-stack (node)
+  (let (rets retval filt live)
+    (if (car node) (setq live (buffer-live-p (caadr node))) (setq live t))
+    (when (and live (caddr (cadr node))) (setq retval 'no-sel))
+    (when (eq sel node) (setq retval 'is-sel))
+    (dolist (n (cddr node))
+      (push (cons (my-display-prune-stack n) n) rets)
+      (when (memq (caar rets) '(has-sel-dead has-sel is-sel))
+        (setq retval 'has-sel))
+      (when (or (eq 'has-sel-dead (caar rets))
+                (and (eq 'is-sel (caar rets)) (null to)))
+        (setcar (car rets) nil)
+        (setq sel node)))
+    (unless (or live (memq retval '(nil no-sel))) (setq retval 'has-sel-dead))
+    (unless (memq retval '(nil has-sel-dead))
+      (dolist (n rets) (when (car n) (push (cdr n) filt)))
+      (setcdr (cdr node) filt))
+    retval))
+
+(defun my-display-collect-windows-in-stack (node)
+  (unless (null (car node))
+    (let ((lkup (assoc (car node) blist)))
+      (if (null lkup) (push (cons (car node) (cadr node)) blist)
+        (unless (time-less-p (cadddr (cadr node)) (cadddr (cdr lkup)))
+          (setcdr lkup (cadr node))))))
+  (dolist (n (cddr node)) (my-display-collect-windows-in-stack n)))
+
+(defun my-maybe-update-side-window-state (win)
+  (let ((node (frame-parameter nil 'my-side-window-tree))
+        (to win) tptr from window)
+    (when node
+      (my-display-find-windows-in-stack node)
+      (when tptr
+        (setq window
+              (-first
+               (lambda (x)
+                 (let ((p x))
+                   (while (and p (not (window-parameter p 'window-side)))
+                     (setq p (window-parent p)))
+                   (and p (eq (car win) (window-parameter p 'window-side))
+                        (eq (cadr win) (window-parameter p 'window-slot)))))
+               (get-buffer-window-list (caadr tptr) 0)))
+        (when window (setcar (cdadr tptr) (current-window-configuration)))))))
+
+(defun my-display-switch-side-window (from &optional to buffer)
+  (let (stack sel selwin fptr tptr blist (my-recursive-display-side-window t))
+    (setq stack (frame-parameter nil 'my-side-window-tree))
+    (unless stack
+      (setq stack '(nil nil))
+      (set-frame-parameter nil 'my-side-window-tree stack))
+    (my-display-find-windows-in-stack stack)
+    (setq sel (or (unless buffer tptr)
+                  (unless (and to (not buffer)) fptr) stack))
+    (when (and to buffer (not (eq (car sel) to))
+               (not (eq (car buffer) (caadr sel))))
+      (setcdr (cdr sel) (cons (list to buffer) (cddr sel)))
+      (unless (caddr (cadr (caddr sel))) (setq sel (caddr sel))))
+    (my-display-prune-stack stack)
+    (when (car sel) (setcar (cdddr (cadr sel)) (current-time)))
+    (my-display-collect-windows-in-stack stack)
+    (save-excursion
+      (dolist (win blist)
+        (when (caddr win)
+          (set-window-configuration (caddr win))
+          (setcar (cddr win) nil)))
+      (dolist (win (window-list nil 0))
+        (let (side slot match (parent win))
+          (while (and parent (not (window-parameter parent 'window-side)))
+            (setq parent (window-parent parent)))
+          (when parent
+            (setq side (window-parameter parent 'window-side))
+            (setq slot (window-parameter parent 'window-slot))
+            (setq match (assoc (list side slot) blist))
+            (if (not match) (delete-side-window win)
+              (setcar match (cons win (car match)))))))
+      (dolist (win blist)
+        (unless (windowp (caar win))
+          (let (alist window (buf (cadr win)))
+            (setq alist `((side . ,(or (caar win) 'bottom))
+                          (slot . ,(or (cadar win) 0))))
+            (setq window (display-buffer-in-side-window buf alist))
+            (setcar win (cons window (car win)))))
+        (when (and (eq (cdar win) (car sel)) (eq (cdr win) (cadr sel)))
+          (setq selwin (caar win)))))
+    (when (windowp selwin) (select-window selwin))))
+
+(defadvice display-buffer-in-side-window (around my-show-side-window activate)
+  (if (boundp 'my-recursive-display-side-window) ad-do-it
+    (let* ((parent (if (window-minibuffer-p) (minibuffer-selected-window)
+                     (selected-window)))
+           (nosel (cdr (assq 'noselect alist)))
+           (buf (list buffer nil nosel (current-time)))
+           (tside (or (cdr (assq 'side alist)) 'bottom))
+           (tslot (or (cdr (assq 'slot alist)) 0))
+           (to (list tside tslot))
+           from fside fslot)
+      (while (and parent (not (window-parameter parent 'window-side)))
+        (setq parent (window-parent parent)))
+      (when parent
+        (setq fside (window-parameter parent 'window-side))
+        (setq fslot (window-parameter parent 'window-slot)))
+      (setq from (list fside fslot))
+      (my-maybe-update-side-window-state to)
+      ad-do-it
+      (my-display-switch-side-window from to buf))))
+
+(defadvice select-window (around my-select-side-window-maybe-close activate)
+  (if (or norecord (boundp 'my-recursive-display-side-window)) ad-do-it
+    (let ((from '(nil nil)) (to '(nil nil)))
+      (let* (side slot (win (window-normalize-window window)) (parent win))
+        (while (and parent (not (window-parameter parent 'window-side)))
+          (setq parent (window-parent parent)))
+        (when parent
+          (setq side (window-parameter parent 'window-side))
+          (setq slot (window-parameter parent 'window-slot))
+          (setq to (list side slot))))
+      (let* ((win (if (window-minibuffer-p) (minibuffer-selected-window)
+                    (selected-window))) side slot (parent win))
+        (while (and parent (not (window-parameter parent 'window-side)))
+          (setq parent (window-parent parent)))
+        (when parent
+          (setq side (window-parameter parent 'window-side))
+          (setq slot (window-parameter parent 'window-slot))
+          (setq from (list side slot))))
+      (my-display-switch-side-window from to)
+      (when (equal to '(nil nil)) ad-do-it))))
+
+(defadvice delete-window (around my-kill-side-window activate)
+  (if (boundp 'my-recursive-display-side-window) ad-do-it
+    (let* (side slot (win (window-normalize-window window)) (parent win))
+      (while (and parent (not (window-parameter parent 'window-side)))
+        (setq parent (window-parent parent)))
+      (if (null parent) ad-do-it
+        (setq side (window-parameter parent 'window-side))
+        (setq slot (window-parameter parent 'window-slot))
+        (let ((ignore-window-parameters t)) ad-do-it)
+        (my-display-switch-side-window (list side slot))))))
+
+(defadvice quit-restore-window (around my-quit-side-window activate)
+  (if (boundp 'my-recursive-display-side-window) ad-do-it
+    (let* (side slot (win (window-normalize-window window)) (parent win))
+      (while (and parent (not (window-parameter parent 'window-side)))
+        (setq parent (window-parent parent)))
+      (if (null parent) ad-do-it
+        (setq side (window-parameter parent 'window-side))
+        (setq slot (window-parameter parent 'window-slot))
+        (let ((my-recursive-display-side-window t)
+              (ignore-window-parameters t))
+          (delete-window window))
+        (my-display-switch-side-window (list side slot))))))
+
 ;;; Do Not Kill Scratch Buffer
 (defun my-save-scratch-buffer ()
   (not (string= (buffer-name (current-buffer)) "*scratch*")))
@@ -292,23 +449,27 @@
 
 ;;; Hook Editing Via Term-Mode
 (defvar-local my-term-prev-match nil)
-(defadvice term-handle-ansi-terminal-messages
-    (before handle-custom-ansi-terminal-messages activate)
+(defadvice term-emulate-terminal
+    (around handle-custom-ansi-terminal-messages activate)
   ;; (with-current-buffer "*scratch*"
-  ;;   (save-excursion (goto-char (point-max)) (insert message)))
+  ;;   (save-excursion (goto-char (point-max)) (insert str)))
   (when my-term-prev-match
-    (setq message (concat my-term-prev-match message))
+    (setq str (concat my-term-prev-match str))
     (setq my-term-prev-match nil))
-  (when (string-match "\eAnSiT.[ \t]*[^\r\n]*\r?\\'" message)
-    (setq my-term-prev-match (substring message (match-beginning 0)))
-    (setq message (replace-match "" t t message)))
-  (when (string-match "\eAnSiT\\(.\\)[ \t]*\\([^\r\n]*\\)\r?\n" message)
-    (let* ((command-code (aref message (match-beginning 1)))
-           (argument (substring message (match-beginning 2) (match-end 2))))
-      (save-excursion
-        (cond ((= command-code ?e) (find-file-other-window argument))
+  (when (string-match "\eAnSiT.[ \t]*[^\r\n]*\r?\\'" str)
+    (setq my-term-prev-match (substring str (match-beginning 0)))
+    (setq str (replace-match "" t t str)))
+  (if (string-match "\eAnSiT\\(.\\)[ \t]*\\([^\r\n]*\\)\r?\n" str)
+      (let* ((command-code (aref str (match-beginning 1)))
+             (argument (substring str (match-beginning 2) (match-end 2))))
+        ad-do-it
+        (cond ((= command-code ?e)
+               (display-buffer-in-side-window
+                (find-file-noselect argument)
+                '((side . bottom) (window-width . 80) (window-height . 15))))
               ((= command-code ?x) (find-file argument))
-              ((= command-code ?m) (man argument)))))))
+              ((= command-code ?m) (man argument))))
+    ad-do-it))
 
 ;;; Auto Open As Root
 (defadvice find-file-noselect (before find-file-sudo activate)
@@ -365,11 +526,14 @@
   (when (eq thing 'evil-WORD) (setq thing 'evil-word)))
 
 ;;; Subword Mode In Evil
-(define-category ?U "Uppercase")
-(define-category ?u "Lowercase")
-(modify-category-entry (cons ?A ?Z) ?U)
-(modify-category-entry (cons ?a ?z) ?u)
-(make-variable-buffer-local 'evil-cjk-word-separating-categories)
+(add-hook
+ 'after-init-hook
+ (lambda ()
+   (define-category ?U "Uppercase")
+   (define-category ?u "Lowercase")
+   (modify-category-entry (cons ?A ?Z) ?U)
+   (modify-category-entry (cons ?a ?z) ?u)
+   (make-variable-buffer-local 'evil-cjk-word-separating-categories)))
 (add-hook
  'subword-mode-hook
  (lambda ()
@@ -454,11 +618,11 @@
 ;;;; Modeline
 
 ;;; Track The Selected Window
-(defvar my-mode-line-selected-window nil)
-(defun set-my-mode-line-selected-window (windows)
-  (when (not (minibuffer-window-active-p (frame-selected-window)))
-    (setq my-mode-line-selected-window (selected-window))))
-(add-function :before pre-redisplay-function #'set-my-mode-line-selected-window)
+(defvar my-mode-line-sel-win nil)
+(defun set-my-mode-line-sel-win (windows)
+  (unless (minibuffer-window-active-p (frame-selected-window))
+    (setq my-mode-line-sel-win (selected-window))))
+(add-function :before pre-redisplay-function 'set-my-mode-line-sel-win)
 
 ;;; Draw The Modeline
 (defconst my-home-dir (expand-file-name "~/"))
@@ -482,22 +646,21 @@
   (unless (eq major-mode (car my-indent-offset))
     (let ((offset (caddr (dtrt-indent--search-hook-mapping major-mode))))
       (setq my-indent-offset (cons major-mode offset))))
-  (let* ((is-record-state (and defining-kbd-macro
-                               (eq my-mode-line-selected-window
-                                   (selected-window))))
-         (state (cond (is-record-state         " RECORD   ")
-                      ((evil-normal-state-p)   " NORMAL   ")
-                      ((evil-visual-state-p)   " VISUAL   ")
-                      ((evil-insert-state-p)   " INSERT   ")
-                      ((evil-replace-state-p)  " REPLACE  ")
-                      ((evil-motion-state-p)   " MOTION   ")
-                      ((evil-operator-state-p) " OPERATOR ")
-                      (t                       " EMACS    ")))
-         (buf (concat (buffer-name) (if (buffer-modified-p) "*" " ") " "))
+  (let* ((is-recording
+          (and defining-kbd-macro (eq my-mode-line-sel-win (selected-window))))
+         (state (cond ((evil-normal-state-p)   " NORM")
+                      ((evil-visual-state-p)   " VISL")
+                      ((evil-insert-state-p)   " INSR")
+                      ((evil-replace-state-p)  " RPLC")
+                      ((evil-motion-state-p)   " MOTN")
+                      ((evil-operator-state-p) " OPER")
+                      (t                       " EMCS")))
+         (strec (concat state (if is-recording "\x25CF " "  ")))
+         (buf (concat (buffer-name) (if (buffer-modified-p) "* " "  ")))
          (ro (if buffer-read-only "[RO]" nil))
          (su (if (and buffer-file-name
                       (file-remote-p buffer-file-name)) "[SU]" nil))
-         (rosu (if (and (null ro) (null su)) "" (concat ro su " ")))
+         (rosu (when (or ro su) (concat ro su " ")))
          (mmode (concat (symbol-name major-mode) " "))
          (offs (number-to-string (symbol-value (cdr my-indent-offset))))
          (tabs (if indent-tabs-mode "T" "S"))
@@ -506,14 +669,14 @@
          (eol (case (coding-system-eol-type buffer-file-coding-system)
                 (0 "LF") (1 "CRLF") (2 "CR")))
          (encode (concat "[" coding ":" eol "]"))
-         (proj (if (or buffer-file-name (eq major-mode 'term-mode))
-                   (cdr my-vc-data) ""))
+         (proj (when (or buffer-file-name (eq major-mode 'term-mode))
+                 (cdr my-vc-data)))
          (emph '(face mode-line-emphasis)))
     (add-text-properties 0 (- (length buf) 2) '(face mode-line-buffer-id) buf)
     (add-text-properties (- (length buf) 2) (length buf) emph buf)
-    (add-text-properties 0 (length state) emph state)
+    (add-text-properties 0 (length strec) emph strec)
     (add-text-properties 0 (length mmode) emph mmode)
-    (list state buf rosu mmode indent encode proj)))
+    (-filter 'identity (list strec buf rosu mmode indent encode proj))))
 
 (defun get-modeline-right ()
   (let ((perc (format-mode-line "%p"))
@@ -521,15 +684,17 @@
                   (concat
                    " (" (int-to-string (helm-candidate-number-at-point))
                    "/" (int-to-string (helm-get-candidate-number t)) ") ")
-                (format-mode-line " (%l,%c) "))))
+                (format-mode-line " (%l,%c) ")))
+        (screen (when (and (window-at-side-p) (window-at-side-p nil 'right))
+                  (concat " " elscreen-mode-line-string))))
     (when (string= perc "Bottom") (setq perc "Bot"))
     (when (string-match-p "[0-9]+%$" perc) (setq perc (concat perc "%")))
-    (concat size perc " " elscreen-mode-line-string " ")))
+    (concat size perc screen " ")))
 
 (defun draw-modeline (lefts right)
   (let* ((lefts (reverse lefts))
          (max (- (window-total-width) (length (format-mode-line right))))
-         (sizes (mapcar #'length lefts))
+         (sizes (mapcar 'length lefts))
          (size (-sum sizes)))
     (while (and lefts (> size max))
       (setq size (- size (car sizes)))
@@ -742,8 +907,8 @@
                    (car-safe (get-text-property 0 'yank-handler txt))))
            (when (vectorp txt) (setq txt (evil-vector-to-string txt)))
            (setq yank-handler
-                 (cond ((eq yank-handler #'evil-yank-line-handler) "l")
-                       ((eq yank-handler #'evil-yank-block-handler) "b")))
+                 (cond ((eq yank-handler 'evil-yank-line-handler) "l")
+                       ((eq yank-handler 'evil-yank-block-handler) "b")))
            (my-term-motion ,motn t nil count nil yank-handler txt))))))
 (my-term-paste-build evil-paste-before my-term-paste-before "P")
 (my-term-paste-build evil-paste-after my-term-paste-after "p")
@@ -833,8 +998,10 @@
           (revert-buffer nil t)))
   "v" 'eval-expression
   "x" (lambda () (interactive)
-        (if (string= "*scratch*" (buffer-name))
+        (if (memq 'lisp-interaction-mode (parent-mode-list major-mode))
             (let ((current-prefix-arg 0))
               (call-interactively 'eval-print-last-sexp))
           (eval-last-sexp nil)))
-  "z" (lambda () (interactive) (setq debug-on-error (not debug-on-error))))
+  "z" (lambda () (interactive)
+        (setq debug-on-error (not debug-on-error))
+        (message "Debug %s" (if debug-on-error "on" "off"))))
