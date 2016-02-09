@@ -3,6 +3,8 @@
 ;;; add support for more vim keys in term-mode
 ;;; fix dd/cc in term-mode
 ;;; add d/c/s/x yank support in term-mode
+;;; disable vim key support unless zsh is running
+;;; fix whitespace issues in term-mode
 ;;; helm-repeat should not close existing window sometimes
 ;;; helm-repeat help should pop up help buffer properly
 ;;; add special handling to reshow some side windows (eg help buffer)
@@ -103,6 +105,7 @@
 (require 'term)
 (require 'multi-term)
 (require 'rcirc)
+(require 'parent-mode)
 (require 'markdown-mode)
 
 ;;;; Behavior
@@ -159,6 +162,7 @@
 (evil-set-initial-state 'package-menu-mode 'motion)
 (evil-set-initial-state 'messages-buffer-mode 'motion)
 (evil-set-initial-state 'compilation-mode 'motion)
+(evil-set-initial-state 'debugger-mode 'motion)
 (evil-set-initial-state 'rcirc-mode 'insert)
 
 ;;; Set Custom Variables
@@ -205,6 +209,7 @@
  '(projectile-completion-system 'helm)
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
+ '(helm-display-header-line nil)
  ;; RCIRC
  '(rcirc-prompt "<%n> ")
  '(rcirc-nick-completion-format "%s, ")
@@ -321,19 +326,18 @@
 (defun my-maybe-update-side-window-state (win)
   (let ((node (frame-parameter nil 'my-side-window-tree))
         (to win) tptr from window)
-    (when node
-      (my-display-find-windows-in-stack node)
-      (when tptr
-        (setq window
-              (-first
-               (lambda (x)
-                 (let ((p x))
-                   (while (and p (not (window-parameter p 'window-side)))
-                     (setq p (window-parent p)))
-                   (and p (eq (car win) (window-parameter p 'window-side))
-                        (eq (cadr win) (window-parameter p 'window-slot)))))
-               (get-buffer-window-list (caadr tptr) 0)))
-        (when window (setcar (cdadr tptr) (current-window-configuration)))))))
+    (when node (my-display-find-windows-in-stack node))
+    (when (and node tptr)
+      (setq window
+            (-first
+             (lambda (x)
+               (let ((p x))
+                 (while (and p (not (window-parameter p 'window-side)))
+                   (setq p (window-parent p)))
+                 (and p (eq (car win) (window-parameter p 'window-side))
+                      (eq (cadr win) (window-parameter p 'window-slot)))))
+             (get-buffer-window-list (caadr tptr) 0)))
+      (when window (setcar (cdadr tptr) (current-window-configuration))))))
 
 (defun my-display-switch-side-window (from &optional to buffer)
   (let (stack sel selwin fptr tptr blist (my-recursive-display-side-window t))
@@ -448,11 +452,83 @@
 (add-hook 'kill-buffer-query-functions 'my-save-scratch-buffer)
 
 ;;; Hook Editing Via Term-Mode
+(defvar-local my-xterm-color-table (make-hash-table))
+(defun my-xterm-color-filter (str)
+  (let* ((stge nil) esc-start cidx spec cval args
+         (rexh "rgb:\\([0-9a-fA-F]+\\)/\\([0-9a-fA-F]+\\)/\\([0-9a-fA-F]+\\)")
+         (rexf "rgbi:\\([0-9.]+\\)/\\([0-9.]+\\)/\\([0-9.]+\\)"))
+    (dotimes (n (length str))
+      (pcase (cons stge (aref str n))
+        (`(nil . ?\e) (setq stge 'esc esc-start n))
+        (`(esc . ?\]) (setq stge 'osc))
+        (`(esc . ?\[) (setq stge 'csi args (list nil)))
+        (`(esc . ,_ ) (setq stge 'nil n (1- n)))
+        (`(osc . ?4 ) (setq stge 'os4))
+        (`(osc . ,_ ) (setq stge 'nil n (1- n)))
+        (`(os4 . ?\;) (setq stge 'cnc cidx nil))
+        (`(os4 . ,_ ) (setq stge 'nil n (1- n)))
+        (`(cnc . ?\;) (setq stge 'spc spec nil))
+        (`(cnc . ,pt) (setq cidx (cons pt cidx)))
+        (`(spc . ?\e) (setq stge 'spe))
+        (`(spc . ?\a) (setq stge 'spd n (1- n)))
+        (`(spc . ,pt) (setq spec (cons pt spec)))
+        (`(spe . ?\\) (setq stge 'spd n (1- n)))
+        (`(spe . ,_ ) (setq stge 'spc spec (cons ?\e spec) n (1- n)))
+        (`(csi . ,(and pt (pred (<= ?0)) (pred (>= ?9))))
+         (setcar args (cons pt (car args))))
+        (`(csi . ?\;) (setq args (cons nil args)))
+        (`(csi . ?m ) (setq stge 'sgr n (1- n)))
+        (`(csi . ,_ ) (setq stge 'nil n esc-start))
+        (`(spd . ,_)
+         (setq cval nil)
+         (setq cidx (string-to-int (concat (nreverse cidx))))
+         (setq spec (concat (nreverse spec)))
+         (when (string-match rexh spec)
+           (let (r g b)
+             (setq r (/ (string-to-number (match-string 1 spec) 16)
+                        (1- (expt 16 (length (match-string 1 spec))))))
+             (setq g (/ (string-to-number (match-string 2 spec) 16)
+                        (1- (expt 16 (length (match-string 2 spec))))))
+             (setq b (/ (string-to-number (match-string 3 spec) 16)
+                        (1- (expt 16 (length (match-string 3 spec))))))
+             (when (and r g b) (setq cval (list r g b)))))
+         (when (string-match rexf spec)
+           (let (r g b)
+             (setq r (string-to-number (match-string 1 spec)))
+             (setq g (string-to-number (match-string 2 spec)))
+             (setq b (string-to-number (match-string 3 spec)))
+             (when (and r g b (< 0 r 1) (< 0 g 1) (< 0 b 1))
+               (setq cval (list r g b)))))
+         (when (string-match "#\\([0-9a-fA-F]+\\)" spec)
+           (let (r g b m d)
+             (setq m (match-string 1 spec))
+             (setq d (/ (length m) 3))
+             (setq r (concat (substring m 0 d) (make-string (- 4 d) ?0)))
+             (setq g (concat (substring m d (* 2 d)) (make-string (- 4 d) ?0)))
+             (setq b (concat (substring m (* 2 d)) (make-string (- 4 d) ?0)))
+             (setq r (/ (string-to-number r 16) 65535))
+             (setq g (/ (string-to-number g 16) 65535))
+             (setq b (/ (string-to-number b 16) 65535))
+             (when (and (zerop (% (length m) 3)) r g b)
+               (setq cval (list r g b)))))
+         (if (not cval) (setq n esc-start)
+           (puthash cidx cval my-xterm-color-table)
+           (setq str (concat (substring str 0 esc-start)
+                             (substring str (1+ n))))
+           (setq --dotimes-limit-- (length str))
+           (setq n (1- esc-start)))
+         (setq stge 'nil))
+        (`(sgr . ,_)
+         ;; TODO: set the proper colors
+         (setq stge 'nil))))))
+
 (defvar-local my-term-prev-match nil)
 (defadvice term-emulate-terminal
     (around handle-custom-ansi-terminal-messages activate)
   ;; (with-current-buffer "*scratch*"
   ;;   (save-excursion (goto-char (point-max)) (insert str)))
+  ;; (with-current-buffer "*scratch1*"
+  ;;   (save-excursion (goto-char (point-max)) (insert (my-xterm-color-filter str))))
   (when my-term-prev-match
     (setq str (concat my-term-prev-match str))
     (setq my-term-prev-match nil))
@@ -889,13 +965,14 @@
          (motn-cmd (concat "\e[::" pto mko cnt psl ":" motn stp ytp psd)))
     (term-send-raw-string motn-cmd)))
 
-(defmacro my-term-change-delete-build (oper name motn)
-  `(defadvice ,oper (around ,name activate)
-     (if (not (eq major-mode 'term-mode)) ad-do-it
-       (my-term-motion ,motn beg end nil (case type (line "l") (block "b")))
-       ,@(when (string= motn "c") '((evil-insert-state))))))
-(my-term-change-delete-build evil-change my-term-change "c")
-(my-term-change-delete-build evil-delete my-term-delete "d")
+;; (defmacro my-term-change-delete-build (oper name motn)
+;;   `(defadvice ,oper (around ,name activate)
+;;      (if (not (eq major-mode 'term-mode))
+;;          (flet ((called-interactively-p (kind) t)) ad-do-it)
+;;        (my-term-motion ,motn beg end nil (case type (line "l") (block "b")))
+;;        ,@(when (string= motn "c") '((evil-insert-state))))))
+;; (my-term-change-delete-build evil-change my-term-change "c")
+;; (my-term-change-delete-build evil-delete my-term-delete "d")
 
 (defmacro my-term-paste-build (oper name motn)
   `(defadvice ,oper (around ,name activate)
@@ -947,9 +1024,10 @@
 ;;; Better Helm Navigation
 (defun my-helm-navigate ()
   (interactive)
-  (if (file-directory-p (helm-get-selection))
-      (helm-execute-persistent-action)
-    (helm-maybe-exit-minibuffer)))
+  (let ((sel (helm-get-selection)))
+    (if (file-directory-p sel)
+        (helm-set-pattern (file-name-as-directory sel))
+      (helm-maybe-exit-minibuffer))))
 (define-key helm-find-files-map (kbd "RET") 'my-helm-navigate)
 (define-key helm-find-files-map (kbd "<C-return>") 'my-helm-navigate)
 (define-key helm-find-files-map (kbd "<S-return>") 'helm-maybe-exit-minibuffer)
