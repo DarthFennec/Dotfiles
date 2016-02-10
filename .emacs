@@ -31,7 +31,7 @@
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
         scala-mode2
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
-        fill-column-indicator))
+        rcirc-styles fill-column-indicator))
 
 ;;; Package Maintenance
 (defun update-packages ()
@@ -105,6 +105,7 @@
 (require 'term)
 (require 'multi-term)
 (require 'rcirc)
+(require 'rcirc-styles)
 (require 'parent-mode)
 (require 'markdown-mode)
 
