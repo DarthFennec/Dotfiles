@@ -133,6 +133,7 @@
         "*Warnings*" "*Backtrace*" "*evil-marks*" "*evil-registers*"
         "*helm-mode-completion-at-point*"
         ("^\\*helm[- ].+\\*$" :regexp t)
+        (magit-log-mode :position right)
         (magit-process-mode :position right)
         (magit-diff-mode :noselect t :position right)
         (magit-revision-mode :noselect t :position right)
