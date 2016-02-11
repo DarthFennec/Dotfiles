@@ -111,9 +111,6 @@
 
 ;;;; Behavior
 
-;; temporary, as Ubuntu's git version is too old
-(setq magit--minimal-git "1.9.0")
-
 ;;; Custom Customization File
 (setq custom-file "~/.emacs-custom.el")
 
