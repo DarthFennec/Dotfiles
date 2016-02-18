@@ -4,7 +4,7 @@ export LOGOUT_COMMAND=xlogout
 export BROWSER=chromium
 [ -s ~/.Xmodmap ] && xmodmap ~/.Xmodmap
 xrandr --output DVI-I-1 --mode 1920x1080
-xrandr --output HDMI-1 --mode 1920x1080 --below DVI-I-1
+xrandr --output HDMI-0 --mode 1920x1080 --below DVI-I-1
 xset s off
 xset -dpms
 xrdb ~/.Xresources
