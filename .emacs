@@ -95,6 +95,7 @@
 (require 'autopair)
 (require 'linum)
 (require 'hl-line)
+(require 'find-func)
 (require 'dtrt-indent)
 (require 'highlight-indent-guides)
 (require 'fill-column-indicator)
@@ -113,6 +114,23 @@
 
 ;;; Custom Customization File
 (setq custom-file "~/.emacs-custom.el")
+
+;;; Custom Source Path
+(defun my-get-all-subdirs (dir)
+  (let ((queue (list (file-name-as-directory (expand-file-name dir))))
+        dirs curr)
+    (while queue
+      (setq curr (pop queue))
+      (when (and (not (string-suffix-p "/." curr))
+                 (not (string-suffix-p "/.." curr))
+                 (file-accessible-directory-p curr))
+        (push (file-name-as-directory curr) dirs)
+        (dolist (subd (directory-files curr t))
+          (push subd queue))))
+    dirs))
+
+(setq my-source-path (my-get-all-subdirs "~/Documents/Reference/emacs/lisp/"))
+(setq find-function-C-source-directory "~/Documents/Reference/emacs/src/")
 
 ;;; Buffers To Hide
 (setq my-boring-buffers
@@ -166,6 +184,8 @@
 
 ;;; Set Custom Variables
 (custom-set-variables
+ ;; Custom Source Path
+ '(find-function-source-path (-concat my-source-path load-path))
  ;; Better Motion
  '(scroll-conservatively 5)
  '(make-pointer-invisible nil)
@@ -209,11 +229,29 @@
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
  '(helm-display-header-line nil)
+ '(projectile-globally-ignored-file-suffixes
+   '(".pyc"))
  ;; RCIRC
  '(rcirc-prompt "<%n> ")
  '(rcirc-nick-completion-format "%s, ")
  '(browse-url-browser-function 'browse-url-generic)
  '(browse-url-generic-program "chromium"))
+
+;;; Help Mode Displays Proper Sources
+(defadvice find-lisp-object-file-name (around my-help-find-source activate)
+  (if (or (subrp type)
+          (and (symbolp object)
+               (integerp (get object 'variable-documentation)))
+          (not (string-match-p
+                "\\bdescribe-\\(function\\|variable\\|face\\)\\b"
+                (with-output-to-string (backtrace)))))
+      ad-do-it
+    (let* ((load-path find-function-source-path)
+           (realtype (if (memq type '(defvar defface)) type 'defun))
+           (type (if (autoloadp type) type
+                   (list 'autoload
+                         (file-name-base (symbol-file object realtype))))))
+      ad-do-it)))
 
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name activate)
@@ -283,6 +321,15 @@
     (funcall mode)
     (setq magit-popup-previous-winconf winconf)))
 
+(defadvice pop-to-buffer (before my-help-pop-to-buffer activate)
+  (when (and (eq major-mode 'help-mode) (boundp 'location))
+    (let* ((window (if (window-minibuffer-p) (minibuffer-selected-window)
+                     (selected-window)))
+           (parent window))
+      (while (and parent (not (window-parameter parent 'window-side)))
+        (setq parent (window-parent parent)))
+      (when parent (delete-window window)))))
+
 ;;; Track Side Windows
 (defun my-display-find-windows-in-stack (node)
   (and from (equal from (car node))
@@ -298,7 +345,8 @@
 (defun my-display-prune-stack (node)
   (let (rets retval filt live)
     (if (car node) (setq live (buffer-live-p (caadr node))) (setq live t))
-    (when (and live (caddr (cadr node))) (setq retval 'no-sel))
+    (when (and live (or (null (car node)) (caddr (cadr node))))
+      (setq retval 'no-sel))
     (when (eq sel node) (setq retval 'is-sel))
     (dolist (n (cddr node))
       (push (cons (my-display-prune-stack n) n) rets)
@@ -325,6 +373,9 @@
 (defun my-maybe-update-side-window-state (win)
   (let ((node (frame-parameter nil 'my-side-window-tree))
         (to win) tptr from window)
+    (unless node
+      (setq node '(nil nil))
+      (set-frame-parameter nil 'my-side-window-tree node))
     (when node (my-display-find-windows-in-stack node))
     (when (and node tptr)
       (setq window
@@ -335,8 +386,10 @@
                    (setq p (window-parent p)))
                  (and p (eq (car win) (window-parameter p 'window-side))
                       (eq (cadr win) (window-parameter p 'window-slot)))))
-             (get-buffer-window-list (caadr tptr) 0)))
-      (when window (setcar (cdadr tptr) (current-window-configuration))))))
+             (get-buffer-window-list (caadr tptr))))
+      (when window (setcar (cdadr tptr) (current-window-configuration))))
+    (when (null (cadr node))
+      (setcar (cdr node) (current-window-configuration)))))
 
 (defun my-display-switch-side-window (from &optional to buffer)
   (let (stack sel selwin fptr tptr blist (my-recursive-display-side-window t))
@@ -348,13 +401,16 @@
     (setq sel (or (unless buffer tptr)
                   (unless (and to (not buffer)) fptr) stack))
     (when (and to buffer (not (eq (car sel) to))
-               (not (eq (car buffer) (caadr sel))))
+               (or (null (car sel)) (not (eq (car buffer) (caadr sel)))))
       (setcdr (cdr sel) (cons (list to buffer) (cddr sel)))
       (unless (caddr (cadr (caddr sel))) (setq sel (caddr sel))))
     (my-display-prune-stack stack)
     (when (car sel) (setcar (cdddr (cadr sel)) (current-time)))
     (my-display-collect-windows-in-stack stack)
     (save-excursion
+      (when (and (null blist) (cadr stack))
+        (set-window-configuration (cadr stack))
+        (setcar (cdr stack) nil))
       (dolist (win blist)
         (when (caddr win)
           (set-window-configuration (caddr win))
@@ -567,20 +623,21 @@
 
 ;;; Newline Auto Comment
 (defadvice newline (around my-comment-newline activate)
-  (if (boundp 'my-recursive-newline) ad-do-it
-    (let ((lst (parent-mode-list major-mode)))
-      (if (or (memq 'prog-mode lst) (memq 'text-mode lst))
-          (let ((my-recursive-newline t)
-                (fill-prefix (fill-context-prefix (point) (point))))
-            (comment-indent-new-line)
-            (indent-according-to-mode))
-        ad-do-it))))
+  (let ((lst (parent-mode-list major-mode)))
+    (if (or (memq 'prog-mode lst) (memq 'text-mode lst))
+        (let ((my-comment-starter
+               (if (and (not (bolp)) (eolp))
+                   (fill-context-prefix (1- (point)) (1- (point)))
+                 (fill-context-prefix (point) (point)))))
+          ad-do-it)
+      ad-do-it)))
 
 ;;; Open Line Auto Comment
 (defvar-local my-comment-starter nil)
 
 (defadvice indent-according-to-mode (before my-insert-comment-starter activate)
-  (when my-comment-starter (insert my-comment-starter)))
+  (when (and my-comment-starter (bolp))
+    (insert my-comment-starter)))
 
 (defadvice evil-cleanup-insert-state (after my-clear-comment-starter activate)
   (setq my-comment-starter nil))
