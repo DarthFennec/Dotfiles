@@ -229,8 +229,6 @@
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
  '(helm-display-header-line nil)
- '(projectile-globally-ignored-file-suffixes
-   '(".pyc"))
  ;; RCIRC
  '(rcirc-prompt "<%n> ")
  '(rcirc-nick-completion-format "%s, ")
@@ -250,7 +248,8 @@
            (realtype (if (memq type '(defvar defface)) type 'defun))
            (type (if (autoloadp type) type
                    (list 'autoload
-                         (file-name-base (symbol-file object realtype))))))
+                         (file-name-base
+                          (or (symbol-file object realtype) ""))))))
       ad-do-it)))
 
 ;;; Keep Temporary Buffers Hidden
@@ -616,10 +615,11 @@
 
 ;;; Control Which Helm Buffers Can Be Resumed
 (defadvice helm-initialize (before helm-control-resume activate)
-  (if (or (string-match-p "^\\*helm-mode-.+\\*$" (helm-buffer-get))
-          (member (helm-buffer-get) my-helm-resumable-buffers))
-      (when (eq any-resume 'noresume) (setq any-resume nil))
-    (setq any-resume 'noresume)))
+  (when (boundp 'any-resume)
+    (if (or (string-match-p "^\\*helm-mode-.+\\*$" (helm-buffer-get))
+            (member (helm-buffer-get) my-helm-resumable-buffers))
+        (when (eq any-resume 'noresume) (setq any-resume nil))
+      (setq any-resume 'noresume))))
 
 ;;; Newline Auto Comment
 (defadvice newline (around my-comment-newline activate)
@@ -644,7 +644,8 @@
 
 (defmacro my-open-comment-build (oper name)
   `(defadvice ,oper (before ,name activate)
-     (setq my-comment-starter (fill-context-prefix (point) (point)))))
+     (when (null my-comment-starter)
+       (setq my-comment-starter (fill-context-prefix (point) (point))))))
 (my-open-comment-build evil-open-below my-evil-open-comment-below)
 (my-open-comment-build evil-open-above my-evil-open-comment-above)
 

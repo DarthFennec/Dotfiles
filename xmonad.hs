@@ -46,15 +46,13 @@ cfg h = defaultConfig
 chwm c = c { startupHook = mappend (startupHook c) (setWMName "LG3D") }
 
 scratchpads =
-  [ NS "rcirc" "emacs -l ~/bin/rcirc" m idHook
-  , NS "pulseaudio" "pavucontrol" (className =? "Pavucontrol") idHook ]
+  [ NS "rcirc" "emacs -l ~/bin/rcirc" m idHook ]
   where m = className =? "Emacs" <&&> fmap (== "RCIRC") title
 
 myManageHook = composeAll
   [ fullscreenManageHook
   , className =? "trayer"         --> doIgnore
   , className =? "Pygtk-shutdown" --> doCenterFloat
-  , className =? "Pavucontrol"    --> doShift "NSP"
   , namedScratchpadManageHook scratchpads ]
 
 tickerHook (ClientMessageEvent _ _ _ _ _ typ dat) = do
@@ -140,7 +138,7 @@ drawStatus = do
             xs -> xs:listn es
         listk [] = []
         listk (x:xs)
-          | x > 100 = listk xs
+          | x == 255 = listk xs
           | otherwise = x:listk xs
 
 drawDate = dzenColorL "lightblue" "" $ date "%a %b %d %Y %I:%M:%S"
@@ -159,7 +157,6 @@ myKeys c@(XConfig {modMask = m}) = let s = m.|.shiftMask in M.fromList $
   , ((m, xK_Escape   ), spawn $ termexec "htop")
   , ((s, xK_BackSpace), recompileXmonad)
   , ((m, xK_BackSpace), spawn "xmonad --restart")
-  , ((s, xK_Tab      ), namedScratchpadAction scratchpads "pulseaudio")
   , ((m, xK_Tab      ), namedScratchpadAction scratchpads "rcirc")
   , ((0, xK_Print    ), runScrot)
   , ((m, xK_x        ), kill)
