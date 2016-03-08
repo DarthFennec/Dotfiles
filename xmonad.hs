@@ -134,8 +134,14 @@ drawStatus = do
   return. Just .concat $ spacer size ++ bars
   where spacer size = ["^p(_RIGHT)^p(-", size, ")^p(;0)"]
         listn [] = []
-        listn (0:_) = []
-        listn (x:xs) = take x xs : listn (drop x xs)
+        listn (a:b:c:d:es) =
+          case listk [a, b, c, d] of
+            [] -> listn es
+            xs -> xs:listn es
+        listk [] = []
+        listk (x:xs)
+          | x > 100 = listk xs
+          | otherwise = x:listk xs
 
 drawDate = dzenColorL "lightblue" "" $ date "%a %b %d %Y %I:%M:%S"
 
@@ -191,7 +197,7 @@ myMouse (XConfig {modMask = m}) = M.fromList
   , ((m, button4), v "+1%")
   , ((m, button5), v "-1%") ]
   where v = const.spawn.(concat ["pactl set-sink-volume ", n, " "] ++)
-        n = "alsa_output.pci-0000_00_14.2.analog-stereo"
+        n = "alsa_output.pci-0000_00_1b.0.analog-stereo"
         s f w = let x = runQuery isFullscreen w
                     y = focus w >> f w >> windows W.shiftMaster
                 in  x >>= (\k -> if k then return () else y)
