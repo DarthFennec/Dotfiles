@@ -1,17 +1,14 @@
 ;;;; TODO List
 ;;; do lazy package loading wherever possible
-;;; add support for more vim keys in term-mode
-;;; fix dd/cc in term-mode
-;;; add d/c/s/x yank support in term-mode
-;;; disable vim key support unless zsh is running
-;;; fix whitespace issues in term-mode
+;;; replace the old term-mode vim integration entirely
+;;; decide whether to disable file locking (check if it works for non-emacs)
 ;;; helm-repeat should not close existing window sometimes
 ;;; helm-repeat help should pop up help buffer properly
 ;;; add special handling to reshow some side windows (eg help buffer)
 ;;; fix issue with completion buffer messing up side buffer tree
+;;; fix issue with side windows sticking around when they shouldn't in magit
+;;; keep term-mode from stealing focus from side windows
 ;;; possibly implement window-local buffer lists
-;;; helm-projectile-ag modeline should show correct row
-;;; evil surround should be repeatable always
 
 ;;;; Packages
 
@@ -27,11 +24,11 @@
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
         evil evil-tabs evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
-        dtrt-indent multi-term hydra key-chord package-utils autopair
+        dtrt-indent multi-term key-chord package-utils autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
-        scala-mode2
+        scala-mode2 shakespeare-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
-        rcirc-styles fill-column-indicator))
+        fill-column-indicator))
 
 ;;; Package Maintenance
 (defun update-packages ()
@@ -105,8 +102,6 @@
 (require 'man)
 (require 'term)
 (require 'multi-term)
-(require 'rcirc)
-(require 'rcirc-styles)
 (require 'parent-mode)
 (require 'markdown-mode)
 
@@ -139,7 +134,7 @@
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
         "^\\*Shell Command Output\\*$"
-        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$" "^\\*irc\\..+\\*$"))
+        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
 
 ;;; Side Window Buffers
 (setq my-side-window-buffers
@@ -149,6 +144,7 @@
         "*helm-mode-completion-at-point*"
         ("^\\*helm[- ].+\\*$" :regexp t)
         (magit-log-mode :position right)
+        (magit-stash-mode :position right)
         (magit-process-mode :position right)
         (magit-diff-mode :noselect t :position right)
         (magit-revision-mode :noselect t :position right)
@@ -160,9 +156,13 @@
         "*helm-ag*" "*helm M-x*" "*helm apt*" "*helm top*" "*helm eval*"
         "*helm calcul*" "*helm colors*" "*helm process*" "*helm buffers*"))
 
+;;; Editing Modes
+(setq my-editing-modes
+      '(prog-mode text-mode conf-mode css-mode gitignore-mode))
+
 ;;; Autosaves And Backups
 (defvar autosave-dir (expand-file-name "~/.emacs.d/autosave/"))
-(defvar backup-dir (expand-file-name "~/.emacs.d/backup/"))
+(setq-default backup-inhibited t)
 
 ;;; Language Specific Changes
 (add-hook 'haskell-mode-hook 'haskell-indentation-mode)
@@ -170,6 +170,7 @@
 (add-hook 'json-mode-hook 'highlight-numbers--turn-off)
 (add-hook 'magit-mode-hook 'turn-off-evil-quickscope-mode)
 (add-to-list 'auto-mode-alist '("README\\.md$" . gfm-mode))
+(add-to-list 'auto-mode-alist '("\\.cassius$" . shakespeare-lucius-mode))
 (add-to-list 'dtrt-indent-hook-mapping-list
              '(groovy-mode c/c++/java c-basic-offset))
 
@@ -180,7 +181,6 @@
 (evil-set-initial-state 'messages-buffer-mode 'motion)
 (evil-set-initial-state 'compilation-mode 'motion)
 (evil-set-initial-state 'debugger-mode 'motion)
-(evil-set-initial-state 'rcirc-mode 'insert)
 
 ;;; Set Custom Variables
 (custom-set-variables
@@ -213,7 +213,6 @@
  '(autopair-blink nil)
  ;; Indentation
  '(indent-tabs-mode nil)
- '(dtrt-indent-max-merge-deviation 0.01)
  '(dtrt-indent-mode t)
  ;; Fill
  '(fill-column 80)
@@ -223,17 +222,24 @@
  ;; Autosaves And Backups
  '(auto-save-list-file-prefix autosave-dir)
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
- '(backup-directory-alist `((".*" . ,backup-dir)))
+ '(make-backup-files nil)
  ;; Helm
  '(projectile-completion-system 'helm)
  '(helm-split-window-preferred-function 'ignore)
  '(helm-boring-buffer-regexp-list my-boring-buffers)
  '(helm-display-header-line nil)
- ;; RCIRC
- '(rcirc-prompt "<%n> ")
- '(rcirc-nick-completion-format "%s, ")
+ ;; Web Links
  '(browse-url-browser-function 'browse-url-generic)
  '(browse-url-generic-program "chromium"))
+
+;;; Editing Mode Helpers
+(defmacro my-add-hook-editing-modes (hook)
+  (let* ((mkhk (lambda (mode) (intern (concat (symbol-name mode) "-hook"))))
+         (ms (lambda (mode) `(add-hook ',(funcall mkhk mode) ,hook))))
+    `(progn ,@(mapcar ms my-editing-modes))))
+
+(defmacro my-check-if-editing-mode-p (lst)
+  `(or ,@(mapcar (lambda (mode) `(memq ',mode ,lst)) my-editing-modes)))
 
 ;;; Help Mode Displays Proper Sources
 (defadvice find-lisp-object-file-name (around my-help-find-source activate)
@@ -506,83 +512,9 @@
 (add-hook 'kill-buffer-query-functions 'my-save-scratch-buffer)
 
 ;;; Hook Editing Via Term-Mode
-(defvar-local my-xterm-color-table (make-hash-table))
-(defun my-xterm-color-filter (str)
-  (let* ((stge nil) esc-start cidx spec cval args
-         (rexh "rgb:\\([0-9a-fA-F]+\\)/\\([0-9a-fA-F]+\\)/\\([0-9a-fA-F]+\\)")
-         (rexf "rgbi:\\([0-9.]+\\)/\\([0-9.]+\\)/\\([0-9.]+\\)"))
-    (dotimes (n (length str))
-      (pcase (cons stge (aref str n))
-        (`(nil . ?\e) (setq stge 'esc esc-start n))
-        (`(esc . ?\]) (setq stge 'osc))
-        (`(esc . ?\[) (setq stge 'csi args (list nil)))
-        (`(esc . ,_ ) (setq stge 'nil n (1- n)))
-        (`(osc . ?4 ) (setq stge 'os4))
-        (`(osc . ,_ ) (setq stge 'nil n (1- n)))
-        (`(os4 . ?\;) (setq stge 'cnc cidx nil))
-        (`(os4 . ,_ ) (setq stge 'nil n (1- n)))
-        (`(cnc . ?\;) (setq stge 'spc spec nil))
-        (`(cnc . ,pt) (setq cidx (cons pt cidx)))
-        (`(spc . ?\e) (setq stge 'spe))
-        (`(spc . ?\a) (setq stge 'spd n (1- n)))
-        (`(spc . ,pt) (setq spec (cons pt spec)))
-        (`(spe . ?\\) (setq stge 'spd n (1- n)))
-        (`(spe . ,_ ) (setq stge 'spc spec (cons ?\e spec) n (1- n)))
-        (`(csi . ,(and pt (pred (<= ?0)) (pred (>= ?9))))
-         (setcar args (cons pt (car args))))
-        (`(csi . ?\;) (setq args (cons nil args)))
-        (`(csi . ?m ) (setq stge 'sgr n (1- n)))
-        (`(csi . ,_ ) (setq stge 'nil n esc-start))
-        (`(spd . ,_)
-         (setq cval nil)
-         (setq cidx (string-to-int (concat (nreverse cidx))))
-         (setq spec (concat (nreverse spec)))
-         (when (string-match rexh spec)
-           (let (r g b)
-             (setq r (/ (string-to-number (match-string 1 spec) 16)
-                        (1- (expt 16 (length (match-string 1 spec))))))
-             (setq g (/ (string-to-number (match-string 2 spec) 16)
-                        (1- (expt 16 (length (match-string 2 spec))))))
-             (setq b (/ (string-to-number (match-string 3 spec) 16)
-                        (1- (expt 16 (length (match-string 3 spec))))))
-             (when (and r g b) (setq cval (list r g b)))))
-         (when (string-match rexf spec)
-           (let (r g b)
-             (setq r (string-to-number (match-string 1 spec)))
-             (setq g (string-to-number (match-string 2 spec)))
-             (setq b (string-to-number (match-string 3 spec)))
-             (when (and r g b (< 0 r 1) (< 0 g 1) (< 0 b 1))
-               (setq cval (list r g b)))))
-         (when (string-match "#\\([0-9a-fA-F]+\\)" spec)
-           (let (r g b m d)
-             (setq m (match-string 1 spec))
-             (setq d (/ (length m) 3))
-             (setq r (concat (substring m 0 d) (make-string (- 4 d) ?0)))
-             (setq g (concat (substring m d (* 2 d)) (make-string (- 4 d) ?0)))
-             (setq b (concat (substring m (* 2 d)) (make-string (- 4 d) ?0)))
-             (setq r (/ (string-to-number r 16) 65535))
-             (setq g (/ (string-to-number g 16) 65535))
-             (setq b (/ (string-to-number b 16) 65535))
-             (when (and (zerop (% (length m) 3)) r g b)
-               (setq cval (list r g b)))))
-         (if (not cval) (setq n esc-start)
-           (puthash cidx cval my-xterm-color-table)
-           (setq str (concat (substring str 0 esc-start)
-                             (substring str (1+ n))))
-           (setq --dotimes-limit-- (length str))
-           (setq n (1- esc-start)))
-         (setq stge 'nil))
-        (`(sgr . ,_)
-         ;; TODO: set the proper colors
-         (setq stge 'nil))))))
-
 (defvar-local my-term-prev-match nil)
 (defadvice term-emulate-terminal
     (around handle-custom-ansi-terminal-messages activate)
-  ;; (with-current-buffer "*scratch*"
-  ;;   (save-excursion (goto-char (point-max)) (insert str)))
-  ;; (with-current-buffer "*scratch1*"
-  ;;   (save-excursion (goto-char (point-max)) (insert (my-xterm-color-filter str))))
   (when my-term-prev-match
     (setq str (concat my-term-prev-match str))
     (setq my-term-prev-match nil))
@@ -624,7 +556,7 @@
 ;;; Newline Auto Comment
 (defadvice newline (around my-comment-newline activate)
   (let ((lst (parent-mode-list major-mode)))
-    (if (or (memq 'prog-mode lst) (memq 'text-mode lst))
+    (if (my-check-if-editing-mode-p lst)
         (let ((my-comment-starter
                (if (and (not (bolp)) (eolp))
                    (fill-context-prefix (1- (point)) (1- (point)))
@@ -703,20 +635,14 @@
 
 ;;; Highlighting And Misc
 (global-paren-face-mode 1)
-(add-hook 'prog-mode-hook 'fci-mode)
-(add-hook 'text-mode-hook 'fci-mode)
-(add-hook 'prog-mode-hook 'linum-mode)
-(add-hook 'text-mode-hook 'linum-mode)
-(add-hook 'prog-mode-hook 'hl-line-mode)
-(add-hook 'text-mode-hook 'hl-line-mode)
-(add-hook 'prog-mode-hook 'autopair-mode)
-(add-hook 'text-mode-hook 'autopair-mode)
-(add-hook 'prog-mode-hook 'whitespace-mode)
-(add-hook 'text-mode-hook 'whitespace-mode)
+(my-add-hook-editing-modes 'fci-mode)
+(my-add-hook-editing-modes 'linum-mode)
+(my-add-hook-editing-modes 'hl-line-mode)
+(my-add-hook-editing-modes 'autopair-mode)
+(my-add-hook-editing-modes 'whitespace-mode)
+(my-add-hook-editing-modes 'highlight-indent-guides-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
-(add-hook 'prog-mode-hook 'highlight-indent-guides-mode)
-(add-hook 'text-mode-hook 'highlight-indent-guides-mode)
 
 ;;; Custom Highlights
 (defface custom-highlights-todo-face
@@ -732,8 +658,7 @@
    nil
    '(("\\bFIXME\\b\\|\\bTODO\\b" 0 'custom-highlights-todo-face t)
      ("[[:nonascii:]]" 0 'custom-highlights-non-ascii-face t))))
-(add-hook 'prog-mode-hook 'custom-highlights)
-(add-hook 'text-mode-hook 'custom-highlights)
+(my-add-hook-editing-modes 'custom-highlights)
 
 ;;; Load Theme
 (load-theme 'monokai t)
@@ -853,36 +778,6 @@
 
 ;;; Custom Ex Commands
 (evil-ex-define-cmd "k[ill-buffer]" 'kill-this-buffer)
-
-;;; Persistent Window Mode
-(defhydra window-mode ()
-  ("s" evil-window-split)
-  ("v" evil-window-vsplit)
-  ("n" evil-window-new)
-  ("c" evil-window-delete)
-  ("o" delete-other-windows)
-  ("h" evil-window-left)
-  ("j" evil-window-down)
-  ("k" evil-window-up)
-  ("l" evil-window-right)
-  ("J" evil-window-move-very-bottom)
-  ("K" evil-window-move-very-top)
-  ("H" evil-window-move-far-left)
-  ("L" evil-window-move-far-right)
-  ("w" evil-window-next)
-  ("W" evil-window-prev)
-  ("t" evil-window-top-left)
-  ("b" evil-window-bottom-right)
-  ("T" evil-tabs-current-buffer-to-tab)
-  ("p" evil-window-mru)
-  ("r" evil-window-rotate-downwards)
-  ("R" evil-window-rotate-upwards)
-  ("+" balance-windows)
-  ("=" evil-window-increase-height)
-  ("-" evil-window-decrease-height)
-  ("." evil-window-increase-width)
-  ("," evil-window-decrease-width)
-  ("q" nil))
 
 ;;; Escape Sequences
 (key-chord-define evil-insert-state-map "jk" 'evil-normal-state)
@@ -1115,7 +1010,6 @@
   "t" 'multi-term
   "g" 'magit-status
   "q" 'update-packages
-  "w" 'window-mode/body
   "u" 'undo-tree-visualize
   "d" 'evil-show-file-info
   "a" 'helm-resume
