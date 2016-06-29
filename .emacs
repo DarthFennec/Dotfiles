@@ -74,7 +74,12 @@
 ;;; Add Custom Load Path
 (add-to-list 'load-path "~/.emacs.d/lisp/")
 
+;;; Fix Slow Startup
+(setq tramp-ssh-controlmaster-options
+      "-o ControlMaster=auto -o ControlPath='tramp.%%C' -o ControlPersist=no")
+
 ;;; Requires
+(require 'tramp)
 (require 'helm)
 (require 'helm-config)
 (require 'magit)
@@ -158,7 +163,8 @@
 
 ;;; Editing Modes
 (setq my-editing-modes
-      '(prog-mode text-mode conf-mode css-mode gitignore-mode))
+      '(prog-mode text-mode conf-mode css-mode haskell-cabal-mode
+                  gitignore-mode))
 
 ;;; Autosaves And Backups
 (defvar autosave-dir (expand-file-name "~/.emacs.d/autosave/"))
@@ -202,6 +208,7 @@
  '(vc-follow-symlinks t)
  '(magit-push-always-verify nil)
  ;; Better Term Behavior
+ '(term-suppress-hard-newline t)
  '(multi-term-program "/bin/zsh")
  '(multi-term-switch-after-close nil)
  '(Man-notify-method 'pushy)
@@ -209,9 +216,10 @@
  '(show-paren-mode t)
  '(column-number-mode t)
  '(elscreen-display-tab nil)
- '(whitespace-style '(face lines-tail trailing tab-mark))
+ '(whitespace-style '(face lines-tail trailing))
  '(autopair-blink nil)
  ;; Indentation
+ '(highlight-indent-guides-method 'character)
  '(indent-tabs-mode nil)
  '(dtrt-indent-mode t)
  ;; Fill
