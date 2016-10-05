@@ -2,8 +2,7 @@
 ;;; do lazy package loading wherever possible
 ;;; replace the old term-mode vim integration entirely
 ;;; decide whether to disable file locking (check if it works for non-emacs)
-;;; helm-repeat should not close existing window sometimes
-;;; helm-repeat help should pop up help buffer properly
+;;; fix ivy-resume failure after switching project
 ;;; add special handling to reshow some side windows (eg help buffer)
 ;;; fix issue with completion buffer messing up side buffer tree
 ;;; fix issue with side windows sticking around when they shouldn't in magit
@@ -20,13 +19,13 @@
 ;;; Package List
 (setq package-list
       '(monokai-theme
-        helm helm-ag helm-projectile
+        ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
         evil evil-tabs evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term key-chord package-utils autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
-        scala-mode2 shakespeare-mode
+        scala-mode shakespeare-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
         fill-column-indicator))
 
@@ -42,12 +41,9 @@
   ;; upgrade
   (package-utils-upgrade-all-no-fetch)
   ;; clean
-  (let ((curr nil)
-        (from package-list)
-        (to nil))
+  (let ((from package-list) to curr)
     (while from
-      (setq curr (car from))
-      (setq from (cdr from))
+      (setq curr (pop from))
       (setq to (cons curr to))
       (dolist (dep (package-desc-reqs (cadr (assoc curr package-alist))))
         (unless (or (package-built-in-p (car dep))
@@ -57,8 +53,8 @@
       (when (and (package-installed-p pack)
                  (not (package-built-in-p pack)) (not (member pack to)))
         (package-utils-remove-by-name pack))))
-  ;; clear the minibuffer
-  (message nil))
+  ;; report success
+  (message "package update complete"))
 
 ;;; Allow Evil To Set Initial States
 (defadvice evil-set-initial-state
@@ -80,8 +76,6 @@
 
 ;;; Requires
 (require 'tramp)
-(require 'helm)
-(require 'helm-config)
 (require 'magit)
 (require 'evil-leader)
 (require 'evil)
@@ -138,28 +132,19 @@
         "^\\*Backtrace\\*$" "^\\*Warnings\\*$" "^\\*WoMan-Log\\*$"
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
-        "^\\*Shell Command Output\\*$"
-        "^\\*helm[- ].+\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
+        "^\\*Shell Command Output\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
 
 ;;; Side Window Buffers
 (setq my-side-window-buffers
       '((" *undo-tree*" :width 60 :position right)
         help-mode Buffer-menu-mode compilation-mode messages-buffer-mode
         "*Warnings*" "*Backtrace*" "*evil-marks*" "*evil-registers*"
-        "*helm-mode-completion-at-point*"
-        ("^\\*helm[- ].+\\*$" :regexp t)
         (magit-log-mode :position right)
         (magit-stash-mode :position right)
         (magit-process-mode :position right)
         (magit-diff-mode :noselect t :position right)
         (magit-revision-mode :noselect t :position right)
         magit-status-mode))
-
-;;; Helm Resumable Buffers
-(setq my-helm-resumable-buffers
-      '("*helm*" "*helm select xfont*" "*helm projectile*" "*Helm Find Files*"
-        "*helm-ag*" "*helm M-x*" "*helm apt*" "*helm top*" "*helm eval*"
-        "*helm calcul*" "*helm colors*" "*helm process*" "*helm buffers*"))
 
 ;;; Editing Modes
 (setq my-editing-modes
@@ -190,6 +175,8 @@
 
 ;;; Set Custom Variables
 (custom-set-variables
+ ;; Package List
+ '(package-selected-packages package-list)
  ;; Custom Source Path
  '(find-function-source-path (-concat my-source-path load-path))
  ;; Better Motion
@@ -226,19 +213,27 @@
  '(fill-column 80)
  '(whitespace-line-column nil)
  '(fci-handle-truncate-lines nil)
+ '(fci-rule-color "#3A3A3A")
  '(truncate-partial-width-windows 90)
  ;; Autosaves And Backups
  '(auto-save-list-file-prefix autosave-dir)
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
  '(make-backup-files nil)
- ;; Helm
- '(projectile-completion-system 'helm)
- '(helm-split-window-preferred-function 'ignore)
- '(helm-boring-buffer-regexp-list my-boring-buffers)
- '(helm-display-header-line nil)
+ ;; Ivy
+ '(projectile-completion-system 'ivy)
+ '(ivy-ignore-buffers my-boring-buffers)
+ '(ivy-add-newline-after-prompt t)
+ '(ivy-fixed-height-minibuffer t)
+ '(ivy-count-format "(%d/%d) ")
+ '(ivy-extra-directories nil)
+ '(ivy-height 15)
  ;; Web Links
  '(browse-url-browser-function 'browse-url-generic)
  '(browse-url-generic-program "chromium"))
+
+;;; Fix Ivy Searching
+(setq ivy-re-builders-alist '((t . ivy--regex-ignore-order)))
+(setq ivy-initial-inputs-alist nil)
 
 ;;; Editing Mode Helpers
 (defmacro my-add-hook-editing-modes (hook)
@@ -249,7 +244,7 @@
 (defmacro my-check-if-editing-mode-p (lst)
   `(or ,@(mapcar (lambda (mode) `(memq ',mode ,lst)) my-editing-modes)))
 
-;;; Help Mode Displays Proper Sources
+;;; Help And Debug Modes Display Proper Sources
 (defadvice find-lisp-object-file-name (around my-help-find-source activate)
   (if (or (subrp type)
           (and (symbolp object)
@@ -265,6 +260,20 @@
                          (file-name-base
                           (or (symbol-file object realtype) ""))))))
       ad-do-it)))
+
+(defadvice symbol-file (after my-symbol-file activate)
+  (let ((xrefs "\\bdebugger-make-xrefs\\b")
+        (mstr "^/usr/share/emacs/[0-9.]+")
+        (rstr (expand-file-name "~/Documents/Reference/emacs"))
+        (retval ad-return-value))
+    (when (and retval
+               (string-match-p xrefs (with-output-to-string (backtrace))))
+      (save-match-data
+        (when (string-match mstr retval)
+          (setq retval (replace-match rstr nil nil retval)))
+        (when (string-match ".elc$" retval)
+          (setq retval (replace-match ".el" nil nil retval))))
+      (setq ad-return-value retval))))
 
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name activate)
@@ -546,21 +555,6 @@
   (unless (or (not filename) (file-writable-p filename))
     (setq filename (concat "/sudo::" (expand-file-name filename)))))
 
-;;; Remove . And .. From Helm Find File
-(defadvice helm-ff-directory-files
-    (after my-helm-ff-directory-files-hide-dots activate)
-  (setq ad-return-value
-        (or (cddr ad-return-value)
-            (list (car ad-return-value)))))
-
-;;; Control Which Helm Buffers Can Be Resumed
-(defadvice helm-initialize (before helm-control-resume activate)
-  (when (boundp 'any-resume)
-    (if (or (string-match-p "^\\*helm-mode-.+\\*$" (helm-buffer-get))
-            (member (helm-buffer-get) my-helm-resumable-buffers))
-        (when (eq any-resume 'noresume) (setq any-resume nil))
-      (setq any-resume 'noresume))))
-
 ;;; Newline Auto Comment
 (defadvice newline (around my-comment-newline activate)
   (let ((lst (parent-mode-list major-mode)))
@@ -620,10 +614,10 @@
 (menu-bar-mode -1)
 (scroll-bar-mode -1)
 
-;;; Helm And Friends
-(helm-mode 1)
+;;; Ivy And Friends
+(ivy-mode 1)
 (projectile-global-mode 1)
-(helm-projectile-on)
+(counsel-projectile-on)
 
 ;;; Evil And Friends
 (global-evil-leader-mode 1)
@@ -673,8 +667,6 @@
 
 ;;; Face Customizations
 (set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
-(set-face-attribute 'helm-selection nil
-                    :background "#39382E" :underline 'unspecified)
 (set-face-attribute 'hl-line nil :background "#39382E")
 (dotimes (i 6)
   (set-face-attribute
@@ -746,11 +738,7 @@
 
 (defun get-modeline-right ()
   (let ((perc (format-mode-line "%p"))
-        (size (if (string-match-p "^\\*helm[- ].+\\*$" (buffer-name))
-                  (concat
-                   " (" (int-to-string (helm-candidate-number-at-point))
-                   "/" (int-to-string (helm-get-candidate-number t)) ") ")
-                (format-mode-line " (%l,%c) ")))
+        (size (format-mode-line " (%l,%c) "))
         (screen (when (and (window-at-side-p) (window-at-side-p nil 'right))
                   (concat " " elscreen-mode-line-string))))
     (when (string= perc "Bottom") (setq perc "Bot"))
@@ -773,11 +761,6 @@
 (setq-default
  mode-line-format
  '((:eval (draw-modeline (get-modeline-left) (get-modeline-right)))))
-
-;;; Helm Should Use New Modeline
-(setq helm-mode-line-string nil)
-(defadvice helm-display-mode-line (before helm-display-my-modeline activate)
-  (when (listp source) (assq-delete-all 'mode-line source)))
 
 ;;; Message Buffer Should Use New Modeline
 (kill-buffer "*Messages*")
@@ -895,20 +878,25 @@
 (define-key Man-mode-map "q" 'Man-kill)
 (define-key woman-mode-map "q" 'Man-kill)
 
-;;; Helm Evil Motions
-(define-key helm-map (kbd "C-j") 'helm-next-line)
-(define-key helm-map (kbd "C-k") 'helm-previous-line)
-(define-key helm-map (kbd "C-n") 'helm-execute-persistent-action)
-(define-key helm-map (kbd "C-p") 'helm-delete-minibuffer-contents)
+;;; Ivy Evil Motions
+(define-key ivy-minibuffer-map (kbd "C-j") 'ivy-next-line)
+(define-key ivy-minibuffer-map (kbd "C-k") 'ivy-previous-line)
+(define-key ivy-minibuffer-map (kbd "C-l") 'counsel-up-directory)
+(define-key ivy-minibuffer-map (kbd "C-w") 'ivy-yank-word)
+(define-key ivy-minibuffer-map (kbd "RET") 'ivy-alt-done)
+(define-key ivy-minibuffer-map (kbd "<C-return>") 'ivy-alt-done)
+(define-key ivy-minibuffer-map (kbd "<S-return>") 'ivy-done)
+
+;;; Counsel Bindings
+(define-key help-map (kbd "f") 'counsel-describe-function)
+(define-key help-map (kbd "v") 'counsel-describe-variable)
+(define-key global-map (kbd "M-x") 'counsel-M-x)
 
 ;;; Leader, Ex, And C-w Bindings Everywhere
 (define-key global-map (kbd "C-,") evil-leader--default-map)
 (define-key global-map (kbd "C-;") 'evil-ex)
 (define-key global-map (kbd "C-w") 'evil-window-map)
 (define-key evil-insert-state-map (kbd "C-w") 'evil-window-map)
-
-;;; Helm M-x
-(define-key global-map (kbd "M-x") 'helm-M-x)
 
 ;;; Term Motions
 (defun my-term-motion (motn &optional pt mk ct st yt ps)
@@ -956,11 +944,11 @@
     (when select-active-regions (let (select-active-regions) (deactivate-mark)))
     (or mouse-yank-at-point (mouse-set-point click))
     (let ((text
-           (if (fboundp 'x-get-selection-value)
+           (if (fboundp 'gui-get-primary-selection)
                (if (eq (framep (selected-frame)) 'w32)
-                   (or (x-get-selection 'PRIMARY) (x-get-selection-value))
-                 (or (x-get-selection-value) (x-get-selection 'PRIMARY)))
-             (x-get-selection 'PRIMARY))))
+                   (or (gui-get-selection 'PRIMARY) (gui-get-primary-selection))
+                 (or (gui-get-primary-selection) (gui-get-selection 'PRIMARY)))
+             (gui-get-selection 'PRIMARY))))
       (if text (my-term-motion "p" t nil nil nil nil text)
         (error "No selection is available")))))
 
@@ -981,36 +969,19 @@
 (define-key evil-insert-state-map (kbd "<C-return>") 'fill-current-line)
 (define-key evil-replace-state-map (kbd "<C-return>") 'fill-current-line)
 
-;;; Better Helm Navigation
-(defun my-helm-navigate ()
-  (interactive)
-  (let ((sel (helm-get-selection)))
-    (if (file-directory-p sel)
-        (helm-set-pattern (file-name-as-directory sel))
-      (helm-maybe-exit-minibuffer))))
-(define-key helm-find-files-map (kbd "RET") 'my-helm-navigate)
-(define-key helm-find-files-map (kbd "<C-return>") 'my-helm-navigate)
-(define-key helm-find-files-map (kbd "<S-return>") 'helm-maybe-exit-minibuffer)
-
 ;;; Projectile Switch Project Map
 (defmacro bind-switch-key (key act)
   `(define-key my-switch-projectile-map ,key
      (lambda () (interactive)
        (let ((projectile-switch-project-action ,act))
-         (helm-projectile-switch-project)))))
-
-(defun my-helm-find-files ()
-  (let ((input (expand-file-name default-directory))
-        (helm-ff-transformer-show-only-basename t))
-    (set-text-properties 0 (length input) nil input)
-    (helm-find-files-1 input)))
+         (counsel-projectile-switch-project)))))
 
 (defvar my-switch-projectile-map (make-sparse-keymap))
 (bind-switch-key "t" 'multi-term)
 (bind-switch-key "g" 'magit-status)
-(bind-switch-key "e" 'my-helm-find-files)
-(bind-switch-key "s" 'helm-projectile-ag)
-(bind-switch-key "f" 'helm-projectile-find-file)
+(bind-switch-key "e" 'counsel-find-file)
+(bind-switch-key "s" 'counsel-ag)
+(bind-switch-key "f" 'counsel-projectile-find-file)
 
 ;;; Leader Bindings
 (evil-leader/set-leader ",")
@@ -1020,11 +991,12 @@
   "q" 'update-packages
   "u" 'undo-tree-visualize
   "d" 'evil-show-file-info
-  "a" 'helm-resume
-  "e" 'helm-find-files
-  "b" 'helm-buffers-list
-  "s" 'helm-projectile-ag
-  "f" 'helm-projectile-find-file
+  "a" 'ivy-resume
+  "e" 'counsel-find-file
+  "b" 'ivy-switch-buffer
+  "s" (lambda () (interactive)
+        (let ((default-directory (projectile-project-root))) (counsel-ag)))
+  "f" 'counsel-projectile-find-file
   "p" my-switch-projectile-map
   "c" (lambda () (interactive) (find-file "~/.emacs"))
   "r" (lambda () (interactive)

@@ -35,6 +35,10 @@ eval $(dircolors -b)
 alias ls="ls -A --color=auto"
 alias grep="grep --color=auto"
 
+# Better syntax highlighting
+source \
+    /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
 # Jump to position if possible
 function try-run-command {
     BLEN="${#BUFFER}"
