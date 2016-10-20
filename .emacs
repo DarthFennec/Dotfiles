@@ -1,7 +1,6 @@
 ;;;; TODO List
 ;;; do lazy package loading wherever possible
 ;;; replace the old term-mode vim integration entirely
-;;; decide whether to disable file locking (check if it works for non-emacs)
 ;;; fix ivy-resume failure after switching project
 ;;; add special handling to reshow some side windows (eg help buffer)
 ;;; fix issue with completion buffer messing up side buffer tree
@@ -21,7 +20,7 @@
       '(monokai-theme
         ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
-        evil evil-tabs evil-leader evil-numbers evil-commentary evil-indent-plus
+        evil evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term key-chord package-utils autopair
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
@@ -71,8 +70,8 @@
 (add-to-list 'load-path "~/.emacs.d/lisp/")
 
 ;;; Fix Slow Startup
-(setq tramp-ssh-controlmaster-options
-      "-o ControlMaster=auto -o ControlPath='tramp.%%C' -o ControlPersist=no")
+;; (setq tramp-ssh-controlmaster-options
+;;       "-o ControlMaster=auto -o ControlPath='tramp.%%C' -o ControlPersist=no")
 
 ;;; Requires
 (require 'tramp)
@@ -106,8 +105,9 @@
 
 ;;;; Behavior
 
-;;; Custom Customization File
-(setq custom-file "~/.emacs-custom.el")
+;;; Disable Customization File
+(setq custom-file "/dev/null")
+(setq disabled-command-function nil)
 
 ;;; Custom Source Path
 (defun my-get-all-subdirs (dir)
@@ -189,6 +189,7 @@
  ;; Better Editing
  '(evil-want-fine-undo 'no)
  '(sentence-end-double-space nil)
+ '(create-lockfiles nil)
  ;; Better Window Behavior
  '(same-window-regexps '("."))
  ;; Better VC Behavior
@@ -202,7 +203,6 @@
  ;; Better Display
  '(show-paren-mode t)
  '(column-number-mode t)
- '(elscreen-display-tab nil)
  '(whitespace-style '(face lines-tail trailing))
  '(autopair-blink nil)
  ;; Indentation
@@ -623,7 +623,6 @@
 (global-evil-leader-mode 1)
 (evil-mode 1)
 (key-chord-mode 1)
-(global-evil-tabs-mode 1)
 
 ;;; Other Helpful Modes
 (evil-commentary-mode 1)
@@ -738,12 +737,10 @@
 
 (defun get-modeline-right ()
   (let ((perc (format-mode-line "%p"))
-        (size (format-mode-line " (%l,%c) "))
-        (screen (when (and (window-at-side-p) (window-at-side-p nil 'right))
-                  (concat " " elscreen-mode-line-string))))
+        (size (format-mode-line " (%l,%c) ")))
     (when (string= perc "Bottom") (setq perc "Bot"))
     (when (string-match-p "[0-9]+%$" perc) (setq perc (concat perc "%")))
-    (concat size perc screen " ")))
+    (concat size perc " ")))
 
 (defun draw-modeline (lefts right)
   (let* ((lefts (reverse lefts))
@@ -898,20 +895,20 @@
 (define-key global-map (kbd "C-w") 'evil-window-map)
 (define-key evil-insert-state-map (kbd "C-w") 'evil-window-map)
 
-;;; Term Motions
-(defun my-term-motion (motn &optional pt mk ct st yt ps)
-  (delete-trailing-whitespace)
-  (let* ((term-proc (get-buffer-process (current-buffer)))
-         (term-point (marker-position (process-mark term-proc)))
-         (ptn (if (eq pt t) (point) pt)) (mkn (if (eq mk t) (mark) mk))
-         (pto (int-to-string (- ptn term-point)))
-         (mko (when mk (concat "," (int-to-string (- mkn term-point)))))
-         (cnt (when ct (concat "#" (int-to-string ct))))
-         (psd (when (and ps (> (length ps) 0)) ps))
-         (psl (when psd (concat ";" (int-to-string (length psd)))))
-         (stp (or st "c")) (ytp (or yt "c"))
-         (motn-cmd (concat "\e[::" pto mko cnt psl ":" motn stp ytp psd)))
-    (term-send-raw-string motn-cmd)))
+;; ;;; Term Motions
+;; (defun my-term-motion (motn &optional pt mk ct st yt ps)
+;;   (delete-trailing-whitespace)
+;;   (let* ((term-proc (get-buffer-process (current-buffer)))
+;;          (term-point (marker-position (process-mark term-proc)))
+;;          (ptn (if (eq pt t) (point) pt)) (mkn (if (eq mk t) (mark) mk))
+;;          (pto (int-to-string (- ptn term-point)))
+;;          (mko (when mk (concat "," (int-to-string (- mkn term-point)))))
+;;          (cnt (when ct (concat "#" (int-to-string ct))))
+;;          (psd (when (and ps (> (length ps) 0)) ps))
+;;          (psl (when psd (concat ";" (int-to-string (length psd)))))
+;;          (stp (or st "c")) (ytp (or yt "c"))
+;;          (motn-cmd (concat "\e[::" pto mko cnt psl ":" motn stp ytp psd)))
+;;     (term-send-raw-string motn-cmd)))
 
 ;; (defmacro my-term-change-delete-build (oper name motn)
 ;;   `(defadvice ,oper (around ,name activate)
@@ -922,45 +919,45 @@
 ;; (my-term-change-delete-build evil-change my-term-change "c")
 ;; (my-term-change-delete-build evil-delete my-term-delete "d")
 
-(defmacro my-term-paste-build (oper name motn)
-  `(defadvice ,oper (around ,name activate)
-     (if (not (eq major-mode 'term-mode)) ad-do-it
-       (let* ((txt (if register (evil-get-register register) (current-kill 0))))
-         (when txt
-           (when (and (not yank-handler) (stringp txt))
-             (setq yank-handler
-                   (car-safe (get-text-property 0 'yank-handler txt))))
-           (when (vectorp txt) (setq txt (evil-vector-to-string txt)))
-           (setq yank-handler
-                 (cond ((eq yank-handler 'evil-yank-line-handler) "l")
-                       ((eq yank-handler 'evil-yank-block-handler) "b")))
-           (my-term-motion ,motn t nil count nil yank-handler txt))))))
-(my-term-paste-build evil-paste-before my-term-paste-before "P")
-(my-term-paste-build evil-paste-after my-term-paste-after "p")
+;; (defmacro my-term-paste-build (oper name motn)
+;;   `(defadvice ,oper (around ,name activate)
+;;      (if (not (eq major-mode 'term-mode)) ad-do-it
+;;        (let* ((txt (if register (evil-get-register register) (current-kill 0))))
+;;          (when txt
+;;            (when (and (not yank-handler) (stringp txt))
+;;              (setq yank-handler
+;;                    (car-safe (get-text-property 0 'yank-handler txt))))
+;;            (when (vectorp txt) (setq txt (evil-vector-to-string txt)))
+;;            (setq yank-handler
+;;                  (cond ((eq yank-handler 'evil-yank-line-handler) "l")
+;;                        ((eq yank-handler 'evil-yank-block-handler) "b")))
+;;            (my-term-motion ,motn t nil count nil yank-handler txt))))))
+;; (my-term-paste-build evil-paste-before my-term-paste-before "P")
+;; (my-term-paste-build evil-paste-after my-term-paste-after "p")
 
-(defadvice mouse-yank-primary (around my-term-mouse-paste activate)
-  (if (not (eq major-mode 'term-mode)) ad-do-it
-    (run-hooks 'mouse-leave-buffer-hook)
-    (when select-active-regions (let (select-active-regions) (deactivate-mark)))
-    (or mouse-yank-at-point (mouse-set-point click))
-    (let ((text
-           (if (fboundp 'gui-get-primary-selection)
-               (if (eq (framep (selected-frame)) 'w32)
-                   (or (gui-get-selection 'PRIMARY) (gui-get-primary-selection))
-                 (or (gui-get-primary-selection) (gui-get-selection 'PRIMARY)))
-             (gui-get-selection 'PRIMARY))))
-      (if text (my-term-motion "p" t nil nil nil nil text)
-        (error "No selection is available")))))
+;; (defadvice mouse-yank-primary (around my-term-mouse-paste activate)
+;;   (if (not (eq major-mode 'term-mode)) ad-do-it
+;;     (run-hooks 'mouse-leave-buffer-hook)
+;;     (when select-active-regions (let (select-active-regions) (deactivate-mark)))
+;;     (or mouse-yank-at-point (mouse-set-point click))
+;;     (let ((text
+;;            (if (fboundp 'gui-get-primary-selection)
+;;                (if (eq (framep (selected-frame)) 'w32)
+;;                    (or (gui-get-selection 'PRIMARY) (gui-get-primary-selection))
+;;                  (or (gui-get-primary-selection) (gui-get-selection 'PRIMARY)))
+;;              (gui-get-selection 'PRIMARY))))
+;;       (if text (my-term-motion "p" t nil nil nil nil text)
+;;         (error "No selection is available")))))
 
-(defmacro my-term-motion-do (ins motn &optional pt mk ct st yt ps)
-  `(lambda ()
-     (interactive)
-     (my-term-motion ,motn ,pt ,mk ,ct ,st ,yt ,ps)
-     ,@(when ins '((evil-insert-state)))))
-(evil-define-key 'normal term-raw-map "A" (my-term-motion-do t "A" t))
-(evil-define-key 'normal term-raw-map "a" (my-term-motion-do t "a" t))
-(evil-define-key 'normal term-raw-map "I" (my-term-motion-do t "I" t))
-(evil-define-key 'normal term-raw-map "i" (my-term-motion-do t "i" t))
+;; (defmacro my-term-motion-do (ins motn &optional pt mk ct st yt ps)
+;;   `(lambda ()
+;;      (interactive)
+;;      (my-term-motion ,motn ,pt ,mk ,ct ,st ,yt ,ps)
+;;      ,@(when ins '((evil-insert-state)))))
+;; (evil-define-key 'normal term-raw-map "A" (my-term-motion-do t "A" t))
+;; (evil-define-key 'normal term-raw-map "a" (my-term-motion-do t "a" t))
+;; (evil-define-key 'normal term-raw-map "I" (my-term-motion-do t "I" t))
+;; (evil-define-key 'normal term-raw-map "i" (my-term-motion-do t "i" t))
 
 ;;; C-RET Fills Current Line
 (defun fill-current-line ()
