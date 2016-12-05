@@ -18,8 +18,10 @@
 ;;; Package List
 (setq package-list
       '(monokai-theme
+        package-lint flycheck-package
         ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
+        magit-gerrit
         evil evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term key-chord package-utils autopair
@@ -87,6 +89,7 @@
 (require 'evil-commentary)
 (require 'evil-matchit)
 (require 'evil-magit)
+(require 'magit-gerrit)
 (require 'autopair)
 (require 'linum)
 (require 'hl-line)
@@ -140,10 +143,11 @@
         help-mode Buffer-menu-mode compilation-mode messages-buffer-mode
         "*Warnings*" "*Backtrace*" "*evil-marks*" "*evil-registers*"
         (magit-log-mode :position right)
+        (magit-refs-mode :position right)
         (magit-stash-mode :position right)
         (magit-process-mode :position right)
+        (magit-revision-mode :position right)
         (magit-diff-mode :noselect t :position right)
-        (magit-revision-mode :noselect t :position right)
         magit-status-mode))
 
 ;;; Editing Modes
@@ -215,6 +219,8 @@
  '(fci-handle-truncate-lines nil)
  '(fci-rule-color "#3A3A3A")
  '(truncate-partial-width-windows 90)
+ '(git-commit-summary-max-length 50)
+ '(git-commit-fill-column 72)
  ;; Autosaves And Backups
  '(auto-save-list-file-prefix autosave-dir)
  '(auto-save-file-name-transforms `((".*" ,autosave-dir t)))
@@ -224,6 +230,7 @@
  '(ivy-ignore-buffers my-boring-buffers)
  '(ivy-add-newline-after-prompt t)
  '(ivy-fixed-height-minibuffer t)
+ '(ivy-on-del-error-function nil)
  '(ivy-count-format "(%d/%d) ")
  '(ivy-extra-directories nil)
  '(ivy-height 15)
@@ -235,6 +242,10 @@
 (setq ivy-re-builders-alist '((t . ivy--regex-ignore-order)))
 (setq ivy-initial-inputs-alist nil)
 
+;;; Magit Gerrit
+(setq-default magit-gerrit-ssh-creds "DarthFennec@review.gerrithub.io")
+(setq-default magit-gerrit-remote "gerrit")
+
 ;;; Editing Mode Helpers
 (defmacro my-add-hook-editing-modes (hook)
   (let* ((mkhk (lambda (mode) (intern (concat (symbol-name mode) "-hook"))))
@@ -243,6 +254,10 @@
 
 (defmacro my-check-if-editing-mode-p (lst)
   `(or ,@(mapcar (lambda (mode) `(memq ',mode ,lst)) my-editing-modes)))
+
+;;; Set Buffer Indentation
+(defun set-indent (width)
+  (set (caddr (dtrt-indent--search-hook-mapping major-mode)) width))
 
 ;;; Help And Debug Modes Display Proper Sources
 (defadvice find-lisp-object-file-name (around my-help-find-source activate)
@@ -552,8 +567,11 @@
 
 ;;; Auto Open As Root
 (defadvice find-file-noselect (before find-file-sudo activate)
-  (unless (or (not filename) (file-writable-p filename))
-    (setq filename (concat "/sudo::" (expand-file-name filename)))))
+  (let ((parent (expand-file-name filename)))
+    (while (and parent (not (file-exists-p parent)))
+      (setq parent (file-name-directory (directory-file-name parent))))
+    (unless (or (not parent) (file-writable-p parent))
+      (setq filename (concat "/sudo::" (expand-file-name filename))))))
 
 ;;; Newline Auto Comment
 (defadvice newline (around my-comment-newline activate)
@@ -648,17 +666,27 @@
 ;;; Custom Highlights
 (defface custom-highlights-todo-face
   '((t (:weight bold :foreground "white" :background "black")))
-  "Face to highlight FIXMEs and TODOs.")
+  "Face to highlight task tags.")
 
 (defface custom-highlights-non-ascii-face
   '((t (:background "#A20C41")))
   "Face to highlight non-ascii characters.")
 
+(defface custom-highlights-tab-face
+  '((t (:background "#282222")))
+  "Face to highlight tab characters.")
+
+(defvar my-task-tags
+  '("ATTENTION" "ATTN" "BUG" "CHECK" "DEBUG" "DEPRECATED" "FIX" "FIXME" "HACK"
+    "NOTE" "NOTES" "OPTIMIZE" "REFACTOR" "REVIEW" "TBD" "TEMP" "TEST" "TMP"
+    "TODO" "WTF" "XXX"))
+
 (defun custom-highlights ()
   (font-lock-add-keywords
    nil
-   '(("\\bFIXME\\b\\|\\bTODO\\b" 0 'custom-highlights-todo-face t)
-     ("[[:nonascii:]]" 0 'custom-highlights-non-ascii-face t))))
+   `((,(regexp-opt my-task-tags 'words) 0 'custom-highlights-todo-face t)
+     ("[[:nonascii:]]" 0 'custom-highlights-non-ascii-face t)
+     ("\t" 0 'custom-highlights-tab-face t))))
 (my-add-hook-editing-modes 'custom-highlights)
 
 ;;; Load Theme
@@ -667,6 +695,8 @@
 ;;; Face Customizations
 (set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
 (set-face-attribute 'hl-line nil :background "#39382E")
+(set-face-attribute 'highlight-indent-guides-character-face nil
+                    :foreground "black" :distant-foreground "#3A3A3A")
 (dotimes (i 6)
   (set-face-attribute
    (intern (concat "markdown-header-face-" (number-to-string (1+ i))))
@@ -784,6 +814,10 @@
 ;;; Bind Space To Repeat Find
 (define-key evil-motion-state-map (kbd "SPC") 'evil-repeat-find-char)
 (define-key evil-motion-state-map (kbd "S-SPC") 'evil-repeat-find-char-reverse)
+
+;;; Bind ^J/^K To Scroll Screen
+(define-key evil-motion-state-map (kbd "C-j") 'evil-scroll-down)
+(define-key evil-motion-state-map (kbd "C-k") 'evil-scroll-up)
 
 ;;; Window Jumps Column Zero
 (evil-define-motion evil-window-top-and-zero (count)
@@ -977,7 +1011,7 @@
 (bind-switch-key "t" 'multi-term)
 (bind-switch-key "g" 'magit-status)
 (bind-switch-key "e" 'counsel-find-file)
-(bind-switch-key "s" 'counsel-ag)
+(bind-switch-key "s" 'counsel-projectile-ag)
 (bind-switch-key "f" 'counsel-projectile-find-file)
 
 ;;; Leader Bindings
@@ -991,8 +1025,7 @@
   "a" 'ivy-resume
   "e" 'counsel-find-file
   "b" 'ivy-switch-buffer
-  "s" (lambda () (interactive)
-        (let ((default-directory (projectile-project-root))) (counsel-ag)))
+  "s" 'counsel-projectile-ag
   "f" 'counsel-projectile-find-file
   "p" my-switch-projectile-map
   "c" (lambda () (interactive) (find-file "~/.emacs"))
