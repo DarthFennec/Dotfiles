@@ -18,7 +18,7 @@
 ;;; Package List
 (setq package-list
       '(monokai-theme
-        package-lint flycheck-package
+        package-lint flycheck-package rust-mode
         ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
         magit-gerrit
@@ -71,38 +71,15 @@
 ;;; Add Custom Load Path
 (add-to-list 'load-path "~/.emacs.d/lisp/")
 
-;;; Fix Slow Startup
-;; (setq tramp-ssh-controlmaster-options
-;;       "-o ControlMaster=auto -o ControlPath='tramp.%%C' -o ControlPersist=no")
-
 ;;; Requires
-(require 'tramp)
-(require 'magit)
-(require 'evil-leader)
 (require 'evil)
-(require 'evil-numbers)
-(require 'evil-quickscope)
-(require 'evil-surround)
-(require 'evil-exchange)
-(require 'evil-indent-plus)
-(require 'evil-visualstar)
-(require 'evil-commentary)
-(require 'evil-matchit)
 (require 'evil-magit)
 (require 'magit-gerrit)
-(require 'autopair)
 (require 'linum)
 (require 'hl-line)
-(require 'find-func)
 (require 'dtrt-indent)
-(require 'highlight-indent-guides)
-(require 'fill-column-indicator)
-(require 'whitespace)
-(require 'key-chord)
 (require 'woman)
 (require 'man)
-(require 'term)
-(require 'multi-term)
 (require 'parent-mode)
 (require 'markdown-mode)
 
@@ -113,20 +90,6 @@
 (setq disabled-command-function nil)
 
 ;;; Custom Source Path
-(defun my-get-all-subdirs (dir)
-  (let ((queue (list (file-name-as-directory (expand-file-name dir))))
-        dirs curr)
-    (while queue
-      (setq curr (pop queue))
-      (when (and (not (string-suffix-p "/." curr))
-                 (not (string-suffix-p "/.." curr))
-                 (file-accessible-directory-p curr))
-        (push (file-name-as-directory curr) dirs)
-        (dolist (subd (directory-files curr t))
-          (push subd queue))))
-    dirs))
-
-(setq my-source-path (my-get-all-subdirs "~/Documents/Reference/emacs/lisp/"))
 (setq find-function-C-source-directory "~/Documents/Reference/emacs/src/")
 
 ;;; Buffers To Hide
@@ -181,8 +144,6 @@
 (custom-set-variables
  ;; Package List
  '(package-selected-packages package-list)
- ;; Custom Source Path
- '(find-function-source-path (-concat my-source-path load-path))
  ;; Better Motion
  '(scroll-conservatively 5)
  '(make-pointer-invisible nil)
@@ -191,6 +152,7 @@
  '(inhibit-startup-screen t)
  '(require-final-newline t)
  ;; Better Editing
+ '(evil-leader/leader ",")
  '(evil-want-fine-undo 'no)
  '(sentence-end-double-space nil)
  '(create-lockfiles nil)
@@ -199,6 +161,7 @@
  ;; Better VC Behavior
  '(vc-follow-symlinks t)
  '(magit-push-always-verify nil)
+ '(magit-no-message '("Turning on magit-auto-revert-mode..."))
  ;; Better Term Behavior
  '(term-suppress-hard-newline t)
  '(multi-term-program "/bin/zsh")
@@ -259,36 +222,22 @@
 (defun set-indent (width)
   (set (caddr (dtrt-indent--search-hook-mapping major-mode)) width))
 
-;;; Help And Debug Modes Display Proper Sources
-(defadvice find-lisp-object-file-name (around my-help-find-source activate)
-  (if (or (subrp type)
-          (and (symbolp object)
-               (integerp (get object 'variable-documentation)))
-          (not (string-match-p
-                "\\bdescribe-\\(function\\|variable\\|face\\)\\b"
-                (with-output-to-string (backtrace)))))
-      ad-do-it
-    (let* ((load-path find-function-source-path)
-           (realtype (if (memq type '(defvar defface)) type 'defun))
-           (type (if (autoloadp type) type
-                   (list 'autoload
-                         (file-name-base
-                          (or (symbol-file object realtype) ""))))))
-      ad-do-it)))
+;;; Display Proper Sources
+(defmacro make-display-sources (funcname advname)
+  `(defadvice ,funcname (after ,advname activate)
+     (let ((mstr "^/usr/share/emacs/[0-9.]+")
+           (rstr (expand-file-name "~/Documents/Reference/emacs"))
+           (retval ad-return-value))
+       (when retval
+         (save-match-data
+           (when (string-match mstr retval)
+             (setq retval (replace-match rstr nil nil retval)))
+           (when (string-match ".elc$" retval)
+             (setq retval (replace-match ".el" nil nil retval))))
+         (setq ad-return-value retval)))))
 
-(defadvice symbol-file (after my-symbol-file activate)
-  (let ((xrefs "\\bdebugger-make-xrefs\\b")
-        (mstr "^/usr/share/emacs/[0-9.]+")
-        (rstr (expand-file-name "~/Documents/Reference/emacs"))
-        (retval ad-return-value))
-    (when (and retval
-               (string-match-p xrefs (with-output-to-string (backtrace))))
-      (save-match-data
-        (when (string-match mstr retval)
-          (setq retval (replace-match rstr nil nil retval)))
-        (when (string-match ".elc$" retval)
-          (setq retval (replace-match ".el" nil nil retval))))
-      (setq ad-return-value retval))))
+(make-display-sources symbol-file my-symbol-file)
+(make-display-sources locate-file my-locate-file)
 
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name activate)
@@ -695,8 +644,6 @@
 ;;; Face Customizations
 (set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
 (set-face-attribute 'hl-line nil :background "#39382E")
-(set-face-attribute 'highlight-indent-guides-character-face nil
-                    :foreground "black" :distant-foreground "#3A3A3A")
 (dotimes (i 6)
   (set-face-attribute
    (intern (concat "markdown-header-face-" (number-to-string (1+ i))))
@@ -909,13 +856,20 @@
 (define-key Man-mode-map "q" 'Man-kill)
 (define-key woman-mode-map "q" 'Man-kill)
 
+;;; Ivy Projectile Special Handling
+(defun my-ivy-alt-done (&optional arg)
+  (interactive "P")
+  (if (string-suffix-p " Switch to project: " ivy--prompt)
+      (ivy-dispatching-done)
+    (ivy-alt-done arg)))
+
 ;;; Ivy Evil Motions
 (define-key ivy-minibuffer-map (kbd "C-j") 'ivy-next-line)
 (define-key ivy-minibuffer-map (kbd "C-k") 'ivy-previous-line)
 (define-key ivy-minibuffer-map (kbd "C-l") 'counsel-up-directory)
 (define-key ivy-minibuffer-map (kbd "C-w") 'ivy-yank-word)
-(define-key ivy-minibuffer-map (kbd "RET") 'ivy-alt-done)
-(define-key ivy-minibuffer-map (kbd "<C-return>") 'ivy-alt-done)
+(define-key ivy-minibuffer-map (kbd "RET") 'my-ivy-alt-done)
+(define-key ivy-minibuffer-map (kbd "<C-return>") 'my-ivy-alt-done)
 (define-key ivy-minibuffer-map (kbd "<S-return>") 'ivy-done)
 
 ;;; Counsel Bindings
@@ -1001,21 +955,21 @@
 (define-key evil-replace-state-map (kbd "<C-return>") 'fill-current-line)
 
 ;;; Projectile Switch Project Map
-(defmacro bind-switch-key (key act)
-  `(define-key my-switch-projectile-map ,key
-     (lambda () (interactive)
-       (let ((projectile-switch-project-action ,act))
-         (counsel-projectile-switch-project)))))
+(defmacro my-bind-action (key act doc)
+  `'(,key (lambda (dir)
+            (let ((projectile-switch-project-action ,act))
+              (projectile-switch-project-by-name dir arg))) ,doc))
 
-(defvar my-switch-projectile-map (make-sparse-keymap))
-(bind-switch-key "t" 'multi-term)
-(bind-switch-key "g" 'magit-status)
-(bind-switch-key "e" 'counsel-find-file)
-(bind-switch-key "s" 'counsel-projectile-ag)
-(bind-switch-key "f" 'counsel-projectile-find-file)
+(ivy-set-actions
+ 'counsel-projectile-switch-project
+ (list
+  (my-bind-action "t" 'multi-term "open terminal")
+  (my-bind-action "g" 'magit-status "open in magit")
+  (my-bind-action "e" 'counsel-find-file "edit file")
+  (my-bind-action "s" 'counsel-projectile-ag "search with ag")
+  (my-bind-action "f" 'counsel-projectile-find-file "find file")))
 
 ;;; Leader Bindings
-(evil-leader/set-leader ",")
 (evil-leader/set-key
   "t" 'multi-term
   "g" 'magit-status
@@ -1027,7 +981,7 @@
   "b" 'ivy-switch-buffer
   "s" 'counsel-projectile-ag
   "f" 'counsel-projectile-find-file
-  "p" my-switch-projectile-map
+  "p" 'counsel-projectile-switch-project
   "c" (lambda () (interactive) (find-file "~/.emacs"))
   "r" (lambda () (interactive)
         (when (buffer-file-name)
