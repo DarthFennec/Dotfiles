@@ -9,8 +9,7 @@ TEXT
 :   ${cpu cpu3}       :   ${cpu cpu4} \
 :   $swapperc         :   $memperc    \
 :   !                 :   !           \
-:   ${texeci 10 nvidia-settings -tq GPUCoreTemp} \
-:   ${hwmon 1 temp 5} \
+:   !                 :   ${hwmon 1 temp 5} \
 :   ${hwmon 0 temp 1} :   ${hwmon 0 temp 2} \
 :   ${hwmon 1 temp 1} :   ${hwmon 1 temp 2} \
 :   ${hwmon 1 temp 3} :   ${hwmon 1 temp 4} \
