@@ -1,7 +1,7 @@
 ;;;; TODO List
+;;; get term-mode working at all again
 ;;; do lazy package loading wherever possible
 ;;; replace the old term-mode vim integration entirely
-;;; fix ivy-resume failure after switching project
 ;;; add special handling to reshow some side windows (eg help buffer)
 ;;; fix issue with completion buffer messing up side buffer tree
 ;;; fix issue with side windows sticking around when they shouldn't in magit
@@ -18,15 +18,15 @@
 ;;; Package List
 (setq package-list
       '(monokai-theme
-        package-lint flycheck-package rust-mode
+        package-lint flycheck-package
         ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
-        magit-gerrit
+        magit-gerrit maven-test-mode
         evil evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
-        dtrt-indent multi-term key-chord package-utils autopair
+        dtrt-indent multi-term key-chord package-utils
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
-        scala-mode shakespeare-mode
+        rust-mode scala-mode shakespeare-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
         fill-column-indicator))
 
@@ -72,6 +72,7 @@
 (add-to-list 'load-path "~/.emacs.d/lisp/")
 
 ;;; Requires
+(require 'cl)
 (require 'evil)
 (require 'evil-magit)
 (require 'magit-gerrit)
@@ -81,7 +82,6 @@
 (require 'woman)
 (require 'man)
 (require 'parent-mode)
-(require 'markdown-mode)
 
 ;;;; Behavior
 
@@ -171,7 +171,12 @@
  '(show-paren-mode t)
  '(column-number-mode t)
  '(whitespace-style '(face lines-tail trailing))
- '(autopair-blink nil)
+ ;; Consistent Font Size
+ '(monokai-height-minus-1 1.0)
+ '(monokai-height-plus-1 1.0)
+ '(monokai-height-plus-2 1.0)
+ '(monokai-height-plus-3 1.0)
+ '(monokai-height-plus-4 1.0)
  ;; Indentation
  '(highlight-indent-guides-method 'character)
  '(indent-tabs-mode nil)
@@ -199,7 +204,11 @@
  '(ivy-height 15)
  ;; Web Links
  '(browse-url-browser-function 'browse-url-generic)
- '(browse-url-generic-program "chromium"))
+ '(browse-url-generic-program "chromium")
+ ;; Maven
+ '(maven-test-test-task-options "-q -Pitest")
+ '(maven-test-test-method-name-regexes
+   '("void +\\([a-zA-Z0-9_]+\\) *()\\(?: *throws *[a-zA-Z0-9_]+\\)? *\n? *{")))
 
 ;;; Fix Ivy Searching
 (setq ivy-re-builders-alist '((t . ivy--regex-ignore-order)))
@@ -606,8 +615,8 @@
 (my-add-hook-editing-modes 'fci-mode)
 (my-add-hook-editing-modes 'linum-mode)
 (my-add-hook-editing-modes 'hl-line-mode)
-(my-add-hook-editing-modes 'autopair-mode)
 (my-add-hook-editing-modes 'whitespace-mode)
+(my-add-hook-editing-modes 'electric-pair-mode)
 (my-add-hook-editing-modes 'highlight-indent-guides-mode)
 (add-hook 'prog-mode-hook 'highlight-quoted-mode)
 (add-hook 'prog-mode-hook 'highlight-numbers-mode)
@@ -642,12 +651,7 @@
 (load-theme 'monokai t)
 
 ;;; Face Customizations
-(set-face-attribute 'linum nil :inverse-video nil :weight 'semi-bold)
-(set-face-attribute 'hl-line nil :background "#39382E")
-(dotimes (i 6)
-  (set-face-attribute
-   (intern (concat "markdown-header-face-" (number-to-string (1+ i))))
-   nil :height 'unspecified))
+(set-face-attribute 'linum nil :inherit 'default)
 
 ;;;; Modeline
 
@@ -667,16 +671,19 @@
   (unless (or (string= default-directory (car my-vc-data))
               (and (projectile-project-p)
                    (string= (projectile-project-root) (car my-vc-data))))
-    (let ((path default-directory) dir vctype vctype1)
+    (let ((path default-directory) dir vctype vctype1 ptype ptype1)
       (if (not (projectile-project-p))
           (setq dir (if (string= default-directory my-home-dir) "~"
                       (file-name-base (directory-file-name default-directory))))
         (setq path (projectile-project-root)
               dir (projectile-project-name)
+              ptype1 (projectile-project-type)
               vctype1 (projectile-project-vcs))
+        (unless (eq 'generic ptype1)
+          (setq ptype (concat ":" (symbol-name ptype1))))
         (unless (eq 'none vctype1)
           (setq vctype (concat ":" (symbol-name vctype1)))))
-      (setq my-vc-data (cons path (concat "[" dir vctype "]")))))
+      (setq my-vc-data (cons path (concat "[" dir ptype vctype "]")))))
   (unless (eq major-mode (car my-indent-offset))
     (let ((offset (caddr (dtrt-indent--search-hook-mapping major-mode))))
       (setq my-indent-offset (cons major-mode offset))))
@@ -797,16 +804,18 @@
 ;;; Evil Open With Extra Line
 (defun evil-open-below-with-extra-line (count)
   (interactive "p")
-  (evil-insert-newline-below)
-  (previous-line)
-  (evil-open-below count))
+  (evil-with-single-undo
+    (evil-insert-newline-below)
+    (previous-line)
+    (evil-open-below count)))
 (define-key evil-normal-state-map "go" 'evil-open-below-with-extra-line)
 
 (defun evil-open-above-with-extra-line (count)
   (interactive "p")
-  (evil-insert-newline-above)
-  (next-line)
-  (evil-open-above count))
+  (evil-with-single-undo
+    (evil-insert-newline-above)
+    (next-line)
+    (evil-open-above count)))
 (define-key evil-normal-state-map "gO" 'evil-open-above-with-extra-line)
 
 ;;; Evil Global Textobject
