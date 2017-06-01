@@ -1,7 +1,7 @@
 HISTFILE=~/.zsh_history
 HISTSIZE=500
 SAVEHIST=500
-setopt appendhistory autocd extendedglob notify bashrematch
+setopt incappendhistory autocd extendedglob notify bashrematch globdots
 unsetopt beep nomatch
 if [ -z "$INSIDE_EMACS" ]
 then
@@ -120,7 +120,10 @@ fi
 
 # Miscellaneous
 alias cls="echo -ne '\ec'"
-preexec() { d="$(echo "$3" | sed "s:^~:$HOME:")" ; [ -d $d ] && ls $d }
+preexec() {
+    d="$(sed "s:^~:$HOME:" <<<"$3")"
+    [ -d $d ] && ! type $d >/dev/null 2>&1 && ls $d
+}
 export CHROMIUM_FLAGS="--enable-print-preview"
 export JAVA_HOME="$(readlink -f /usr/bin/javac | sed "s:bin/javac::")"
 export _JAVA_AWT_WM_NONREPARENTING=1

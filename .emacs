@@ -26,7 +26,7 @@
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term key-chord package-utils
         python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
-        rust-mode scala-mode shakespeare-mode
+        rust-mode enh-ruby-mode scala-mode shakespeare-mode yaml-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
         fill-column-indicator))
 
@@ -82,6 +82,8 @@
 (require 'woman)
 (require 'man)
 (require 'parent-mode)
+(require 'groovy-mode)
+(require 'cc-vars)
 
 ;;;; Behavior
 
@@ -170,7 +172,7 @@
  ;; Better Display
  '(show-paren-mode t)
  '(column-number-mode t)
- '(whitespace-style '(face lines-tail trailing))
+ '(whitespace-style '(face trailing))
  ;; Consistent Font Size
  '(monokai-height-minus-1 1.0)
  '(monokai-height-plus-1 1.0)
@@ -181,6 +183,7 @@
  '(highlight-indent-guides-method 'character)
  '(indent-tabs-mode nil)
  '(dtrt-indent-mode t)
+ '(tab-width 4)
  ;; Fill
  '(fill-column 80)
  '(whitespace-line-column nil)
@@ -559,6 +562,13 @@
 (my-open-comment-build evil-open-below my-evil-open-comment-below)
 (my-open-comment-build evil-open-above my-evil-open-comment-above)
 
+;;; Fix Haskell Reindent
+(defadvice haskell-indentation-next-indentation (before my-hs-indent activate)
+  (when (memq this-command '(evil-open-above evil-open-below))
+    (setq col (save-excursion
+                (end-of-line 0)
+                (1- (haskell-indentation-current-indentation))))))
+
 ;;; Join Line Remove Prefix
 (defadvice join-line (around join-line-remove-prefix activate)
   (let ((fill-prefix (fill-context-prefix (point) (point)))) ad-do-it))
@@ -610,17 +620,6 @@
 (evil-exchange-install)
 (evil-indent-plus-default-bindings)
 
-;;; Highlighting And Misc
-(global-paren-face-mode 1)
-(my-add-hook-editing-modes 'fci-mode)
-(my-add-hook-editing-modes 'linum-mode)
-(my-add-hook-editing-modes 'hl-line-mode)
-(my-add-hook-editing-modes 'whitespace-mode)
-(my-add-hook-editing-modes 'electric-pair-mode)
-(my-add-hook-editing-modes 'highlight-indent-guides-mode)
-(add-hook 'prog-mode-hook 'highlight-quoted-mode)
-(add-hook 'prog-mode-hook 'highlight-numbers-mode)
-
 ;;; Custom Highlights
 (defface custom-highlights-todo-face
   '((t (:weight bold :foreground "white" :background "black")))
@@ -644,8 +643,19 @@
    nil
    `((,(regexp-opt my-task-tags 'words) 0 'custom-highlights-todo-face t)
      ("[[:nonascii:]]" 0 'custom-highlights-non-ascii-face t)
-     ("\t" 0 'custom-highlights-tab-face t))))
+     ("\t" 0 'custom-highlights-tab-face t)) t))
 (my-add-hook-editing-modes 'custom-highlights)
+
+;;; Highlighting And Misc
+(global-paren-face-mode 1)
+(my-add-hook-editing-modes 'fci-mode)
+(my-add-hook-editing-modes 'linum-mode)
+(my-add-hook-editing-modes 'hl-line-mode)
+(my-add-hook-editing-modes 'whitespace-mode)
+(my-add-hook-editing-modes 'electric-pair-mode)
+(my-add-hook-editing-modes 'highlight-indent-guides-mode)
+(add-hook 'prog-mode-hook 'highlight-quoted-mode)
+(add-hook 'prog-mode-hook 'highlight-numbers-mode)
 
 ;;; Load Theme
 (load-theme 'monokai t)
