@@ -84,6 +84,7 @@
 (require 'parent-mode)
 (require 'groovy-mode)
 (require 'cc-vars)
+(require 'cc-fonts)
 
 ;;;; Behavior
 
@@ -233,6 +234,26 @@
 ;;; Set Buffer Indentation
 (defun set-indent (width)
   (set (caddr (dtrt-indent--search-hook-mapping major-mode)) width))
+
+;;; Clean Projectile Listing
+(defun clean-projectile-list ()
+  (interactive)
+  (let ((f (expand-file-name "projectile-bookmarks.eld" user-emacs-directory))
+        prelist postlist)
+    (with-demoted-errors "Error during file deserialization: %S"
+      (if (not (file-writable-p f))
+          (message "Projectile list unwritable")
+        (setq prelist
+              (nreverse
+               (with-temp-buffer
+                 (insert-file-contents f)
+                 (read (buffer-string)))))
+        (dolist (elem prelist)
+          (when (file-exists-p (expand-file-name elem))
+            (setq postlist (cons elem postlist))))
+        (with-temp-file f
+          (insert (let (print-length) (prin1-to-string postlist))))
+        (message "Projectile list cleaned")))))
 
 ;;; Display Proper Sources
 (defmacro make-display-sources (funcname advname)
@@ -713,7 +734,8 @@
                       (file-remote-p buffer-file-name)) "[SU]" nil))
          (rosu (when (or ro su) (concat ro su " ")))
          (mmode (concat (symbol-name major-mode) " "))
-         (offs (number-to-string (symbol-value (cdr my-indent-offset))))
+         (offs (let ((x (symbol-value (cdr my-indent-offset))))
+                 (if (numberp x) (number-to-string x) "?")))
          (tabs (if indent-tabs-mode "T" "S"))
          (indent (concat "[" offs tabs "]"))
          (coding (symbol-name (coding-system-type buffer-file-coding-system)))
