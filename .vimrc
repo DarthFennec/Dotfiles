@@ -52,9 +52,10 @@ set list
 set listchars=tab:▶\ ,trail:·
 
 " Indent Options
-set tabstop=2
-set softtabstop=2
-set shiftwidth=2
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+set expandtab
 set autoindent
 
 " Search Options
@@ -73,20 +74,20 @@ set directory=~/.vim/.swap//
 command! W w ! sudo tee % > /dev/null
 
 " CtrlP Options
-let g:ctrlp_cmd = 'CtrlPBuffer'
 let g:ctrlp_user_command =
   \ ['.git', 'cd %s && git ls-files -co --exclude-standard --full-name',
   \ 'ag %s -l --nocolor -g ""']
-nnoremap <silent> <c-o> :CtrlP<cr>
 
 " Leader Bindings
 let mapleader=","
 nnoremap <leader>s :CtrlSF 
+nnoremap <silent> <leader>f :CtrlP<cr>
+nnoremap <silent> <leader>b :CtrlPBuffer<cr>
 nnoremap <silent> <leader>a :CtrlSFOpen<cr>
 nnoremap <silent> <leader>u :GundoToggle<cr>
 nnoremap <silent> <leader>i :DetectIndent<cr>
 nnoremap <silent> <leader>w /[^\x00-\x7f]<cr>
-nnoremap <silent> <leader>e :split $MYVIMRC<cr>
+nnoremap <silent> <leader>c :split $MYVIMRC<cr>
 nnoremap <silent> <leader>r :source $MYVIMRC<cr>
 
 " Custom Rebindings
@@ -97,20 +98,10 @@ nnoremap H H0
 nnoremap M M0
 nnoremap L L0
 inoremap jk <esc>
+inoremap <c-g> <esc>
+noremap <c-g> <esc>
 noremap ; :
-noremap : ;
+noremap <space> ;
 noremap Y y$
-noremap <c-h> <c-w>h
-noremap <c-j> <c-w>j
-noremap <c-k> <c-w>k
-noremap <c-l> <c-w>l
-
-" Disable Arrow Keys
-noremap  <up>    <nop>
-noremap  <down>  <nop>
-noremap  <left>  <nop>
-noremap  <right> <nop>
-inoremap <up>    <nop>
-inoremap <down>  <nop>
-inoremap <left>  <nop>
-inoremap <right> <nop>
+noremap <c-j> <c-d>0
+noremap <c-k> <c-u>0

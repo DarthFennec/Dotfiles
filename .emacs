@@ -21,7 +21,7 @@
         package-lint flycheck-package
         ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
-        magit-gerrit maven-test-mode
+        maven-test-mode
         evil evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term key-chord package-utils
@@ -75,7 +75,6 @@
 (require 'cl)
 (require 'evil)
 (require 'evil-magit)
-(require 'magit-gerrit)
 (require 'linum)
 (require 'hl-line)
 (require 'dtrt-indent)
@@ -85,6 +84,7 @@
 (require 'groovy-mode)
 (require 'cc-vars)
 (require 'cc-fonts)
+(require 'counsel-projectile)
 
 ;;;; Behavior
 
@@ -132,8 +132,9 @@
 (add-hook 'magit-mode-hook 'turn-off-evil-quickscope-mode)
 (add-to-list 'auto-mode-alist '("README\\.md$" . gfm-mode))
 (add-to-list 'auto-mode-alist '("\\.cassius$" . shakespeare-lucius-mode))
+(add-to-list 'auto-mode-alist '("\\.hbs$" . html-mode))
 (add-to-list 'dtrt-indent-hook-mapping-list
-             '(groovy-mode c/c++/java c-basic-offset))
+             '(groovy-mode c/c++/java groovy-indent-offset))
 
 ;;; Set Initial Evil States
 (add-hook 'Man-mode-hook 'evil-motion-state)
@@ -217,10 +218,6 @@
 ;;; Fix Ivy Searching
 (setq ivy-re-builders-alist '((t . ivy--regex-ignore-order)))
 (setq ivy-initial-inputs-alist nil)
-
-;;; Magit Gerrit
-(setq-default magit-gerrit-ssh-creds "DarthFennec@review.gerrithub.io")
-(setq-default magit-gerrit-remote "gerrit")
 
 ;;; Editing Mode Helpers
 (defmacro my-add-hook-editing-modes (hook)
@@ -996,19 +993,15 @@
 (define-key evil-replace-state-map (kbd "<C-return>") 'fill-current-line)
 
 ;;; Projectile Switch Project Map
-(defmacro my-bind-action (key act doc)
-  `'(,key (lambda (dir)
-            (let ((projectile-switch-project-action ,act))
-              (projectile-switch-project-by-name dir arg))) ,doc))
-
 (ivy-set-actions
  'counsel-projectile-switch-project
- (list
-  (my-bind-action "t" 'multi-term "open terminal")
-  (my-bind-action "g" 'magit-status "open in magit")
-  (my-bind-action "e" 'counsel-find-file "edit file")
-  (my-bind-action "s" 'counsel-projectile-ag "search with ag")
-  (my-bind-action "f" 'counsel-projectile-find-file "find file")))
+ '(("t" (lambda (dir)
+          (let ((projectile-switch-project-action 'multi-term))
+            (counsel-projectile-switch-project-action dir))) "open terminal")
+   ("g" counsel-projectile-switch-project-action-vc "open in magit")
+   ("e" counsel-projectile-switch-project-action-find-file-manually "edit file")
+   ("s" counsel-projectile-switch-project-action-ag "search with ag")
+   ("f" counsel-projectile-switch-project-action-find-file "find file")))
 
 ;;; Leader Bindings
 (evil-leader/set-key
