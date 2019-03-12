@@ -129,5 +129,6 @@ export JAVA_HOME="$(readlink -f /usr/bin/javac | sed "s:bin/javac::")"
 export _JAVA_AWT_WM_NONREPARENTING=1
 export TERM=xterm-256color
 export GOPATH=$HOME/go
+export GOROOT=$(go env GOROOT)
 export EDITOR=vim
 export VISUAL=vim

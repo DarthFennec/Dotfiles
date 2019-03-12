@@ -18,15 +18,16 @@
 ;;; Package List
 (setq package-list
       '(monokai-theme
-        package-lint flycheck-package
+        package-lint flycheck-package gif-screencast
+        font-lock-studio font-lock-profiler highlight-refontification
         ivy counsel counsel-projectile swiper
         magit evil-magit gitattributes-mode gitconfig-mode gitignore-mode
-        maven-test-mode
+        maven-test-mode adaptive-wrap
         evil evil-leader evil-numbers evil-commentary evil-indent-plus
         evil-surround evil-quickscope evil-exchange evil-visualstar evil-matchit
         dtrt-indent multi-term key-chord package-utils
-        python-mode groovy-mode haskell-mode markdown-mode go-mode json-mode
-        rust-mode enh-ruby-mode scala-mode shakespeare-mode yaml-mode
+        groovy-mode haskell-mode markdown-mode go-mode json-mode rust-mode
+        enh-ruby-mode scala-mode shakespeare-mode yaml-mode
         highlight-indent-guides highlight-quoted highlight-numbers paren-face
         fill-column-indicator))
 
@@ -101,11 +102,12 @@
         "^\\*Backtrace\\*$" "^\\*Warnings\\*$" "^\\*WoMan-Log\\*$"
         "^\\*Compile-Log\\*$" "^\\*tramp/.+\\*$" "^\\*Faces\\*$"
         "^\\*evil-marks\\*$" "^\\*evil-registers\\*$" "\\*Packages\\*"
-        "^\\*Shell Command Output\\*$" "^\\*magit\\(-\\w+\\)?: .+$"))
+        "^\\*Shell Command Output\\*$" "^\\*?magit\\(-\\w+\\)?: .+$"))
 
 ;;; Side Window Buffers
 (setq my-side-window-buffers
       '((" *undo-tree*" :width 60 :position right)
+        ("*Font Lock Studio*" :width 60 :position left)
         help-mode Buffer-menu-mode compilation-mode messages-buffer-mode
         "*Warnings*" "*Backtrace*" "*evil-marks*" "*evil-registers*"
         (magit-log-mode :position right)
@@ -183,6 +185,7 @@
  '(monokai-height-plus-4 1.0)
  ;; Indentation
  '(highlight-indent-guides-method 'character)
+ '(highlight-indent-guides-responsive 'stack)
  '(indent-tabs-mode nil)
  '(dtrt-indent-mode t)
  '(tab-width 4)
@@ -269,6 +272,15 @@
 (make-display-sources symbol-file my-symbol-file)
 (make-display-sources locate-file my-locate-file)
 
+;;; Remove highlight-indent-guides Displays In Swiper
+(defadvice ivy-cleanup-string (after my-ivy-cleanup-hig activate)
+  (let ((pos 0) (next 0) (limit (length str)) (prop 'highlight-indent-guides-prop))
+    (while (and pos next)
+      (setq next (text-property-not-all pos limit prop nil str))
+      (when next
+        (setq pos (text-property-any next limit prop nil str))
+        (remove-text-properties next pos '(display nil face nil) str)))))
+
 ;;; Keep Temporary Buffers Hidden
 (defadvice buffer-name (after boring-buffer-name activate)
   (and ad-return-value
@@ -298,7 +310,11 @@
   (let ((parent window))
     (while (and parent (not (window-parameter parent 'window-side)))
       (setq parent (window-parent parent)))
-    (if (null parent) (keyboard-quit) (delete-side-window window))))
+    (if (null parent) (keyboard-quit)
+      (let ((window-combination-resize
+             (window-parameter (window-parent window) 'window-side))
+            (ignore-window-parameters t))
+        (delete-window window)))))
 
 (defun my-display-get-config (buffer)
   (let ((bufname (if (bufferp buffer) (buffer-name buffer) buffer)))
@@ -621,7 +637,7 @@
 ;;; Ivy And Friends
 (ivy-mode 1)
 (projectile-global-mode 1)
-(counsel-projectile-on)
+(counsel-projectile-mode)
 
 ;;; Evil And Friends
 (global-evil-leader-mode 1)
@@ -656,10 +672,21 @@
     "NOTE" "NOTES" "OPTIMIZE" "REFACTOR" "REVIEW" "TBD" "TEMP" "TEST" "TMP"
     "TODO" "WTF" "XXX"))
 
+(defvar my-task-tags-regexp (regexp-opt my-task-tags 'words))
+
+(defun my-task-tags-highlighter (limit)
+  (let ((case-fold-search nil))
+    (catch 'done
+      (while t
+        (if (not (re-search-forward my-task-tags-regexp limit t))
+            (throw 'done nil)
+          (when (nth 4 (syntax-ppss))
+            (throw 'done (point))))))))
+
 (defun custom-highlights ()
   (font-lock-add-keywords
    nil
-   `((,(regexp-opt my-task-tags 'words) 0 'custom-highlights-todo-face t)
+   '((my-task-tags-highlighter 0 'custom-highlights-todo-face t)
      ("[[:nonascii:]]" 0 'custom-highlights-non-ascii-face t)
      ("\t" 0 'custom-highlights-tab-face t)) t))
 (my-add-hook-editing-modes 'custom-highlights)
@@ -993,15 +1020,15 @@
 (define-key evil-replace-state-map (kbd "<C-return>") 'fill-current-line)
 
 ;;; Projectile Switch Project Map
-(ivy-set-actions
- 'counsel-projectile-switch-project
- '(("t" (lambda (dir)
-          (let ((projectile-switch-project-action 'multi-term))
-            (counsel-projectile-switch-project-action dir))) "open terminal")
-   ("g" counsel-projectile-switch-project-action-vc "open in magit")
-   ("e" counsel-projectile-switch-project-action-find-file-manually "edit file")
-   ("s" counsel-projectile-switch-project-action-ag "search with ag")
-   ("f" counsel-projectile-switch-project-action-find-file "find file")))
+(setq
+ counsel-projectile-switch-project-action
+ '(3 ("t" (lambda (dir)
+            (let ((projectile-switch-project-action 'multi-term))
+              (counsel-projectile-switch-project-action dir))) "open terminal")
+     ("g" counsel-projectile-switch-project-action-vc "open in magit")
+     ("e" counsel-projectile-switch-project-action-find-file-manually "edit file")
+     ("s" counsel-projectile-switch-project-action-ag "search with ag")
+     ("f" counsel-projectile-switch-project-action-find-file "find file")))
 
 ;;; Leader Bindings
 (evil-leader/set-key
