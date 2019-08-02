@@ -3,7 +3,6 @@
 import XMonad
 import XMonad.Util.Run
 import XMonad.Util.Loggers
-import XMonad.Util.NamedScratchpad
 import XMonad.Util.WorkspaceCompare (getSortByIndex)
 import XMonad.Hooks.EwmhDesktops hiding (fullscreenEventHook)
 import XMonad.Hooks.ManageHelpers (isFullscreen, doCenterFloat)
@@ -45,15 +44,11 @@ cfg h = defaultConfig
 
 chwm c = c { startupHook = mappend (startupHook c) (setWMName "LG3D") }
 
-scratchpads =
-  [ NS "rcirc" "emacs -l ~/bin/rcirc" m idHook ]
-  where m = className =? "Emacs" <&&> fmap (== "RCIRC") title
-
 myManageHook = composeAll
   [ fullscreenManageHook
-  , className =? "trayer"         --> doIgnore
-  , className =? "Pygtk-shutdown" --> doCenterFloat
-  , namedScratchpadManageHook scratchpads ]
+  , className =? "trayer"               --> doIgnore
+  , className =? "Pygtk-shutdown"       --> doCenterFloat
+  , className =? "looking-glass-client" --> doShift "~" ]
 
 tickerHook (ClientMessageEvent _ _ _ _ _ typ dat) = do
   a <- getAtom "TUCKER_TICKER"
@@ -157,8 +152,6 @@ myKeys c@(XConfig {modMask = m}) = let s = m.|.shiftMask in M.fromList $
   , ((m, xK_Escape   ), spawn $ termexec "htop")
   , ((s, xK_BackSpace), recompileXmonad)
   , ((m, xK_BackSpace), spawn "xmonad --restart")
-  , ((s, xK_minus    ), spawn "kvm.sh arch")
-  , ((s, xK_equal    ), spawn "kvm.sh win7")
   , ((0, xK_Print    ), runScrot)
   , ((m, xK_x        ), kill)
   , ((m, xK_t        ), withFocused $ windows. W.sink)
@@ -168,7 +161,8 @@ myKeys c@(XConfig {modMask = m}) = let s = m.|.shiftMask in M.fromList $
   , ((m, xK_n        ), spawn "mpc next")
   , ((m, xK_p        ), spawn "mpc toggle")
   , ((m, xK_s        ), spawn "mpc stop")
-  , ((m, xK_z        ), spawn "wave 10 | aplay -fFLOAT_LE -r48000 -c1 -q")
+  , ((m, xK_z        ), spawn "sudo ddccontrol -r 0x60 -w 17 dev:/dev/i2c-1")
+  , ((s, xK_z        ), spawn "sudo ddccontrol -r 0x60 -w 3 dev:/dev/i2c-1")
   , ((m, xK_space    ), sendMessage NextLayout)
   , ((m, xK_Down     ), windows W.focusDown)
   , ((m, xK_Up       ), windows W.focusUp)
@@ -196,7 +190,7 @@ myMouse (XConfig {modMask = m}) = M.fromList
   , ((m, button4), v "+1%")
   , ((m, button5), v "-1%") ]
   where v = const.spawn.(concat ["pactl set-sink-volume ", n, " "] ++)
-        n = "alsa_output.pci-0000_00_1b.0.analog-stereo"
+        n = "alsa_output.pci-0000_00_1f.3.analog-stereo"
         s f w = let x = runQuery isFullscreen w
                     y = focus w >> f w >> windows W.shiftMaster
                 in  x >>= (\k -> if k then return () else y)

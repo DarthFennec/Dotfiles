@@ -124,6 +124,7 @@ preexec() {
     d="$(sed "s:^~:$HOME:" <<<"$3")"
     [ -d $d ] && ! type $d >/dev/null 2>&1 && ls $d
 }
+export LIBVIRT_DEFAULT_URI="qemu:///system"
 export CHROMIUM_FLAGS="--enable-print-preview"
 export JAVA_HOME="$(readlink -f /usr/bin/javac | sed "s:bin/javac::")"
 export _JAVA_AWT_WM_NONREPARENTING=1
